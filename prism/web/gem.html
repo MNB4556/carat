@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Prism — spectral gem renderer</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #07080b; overflow: hidden;
+    font: 12px/1.45 ui-monospace, "SF Mono", Consolas, monospace; color: #c9cdd6; }
+  #gpu { display: block; width: 100vw; height: 100vh;
+    image-rendering: pixelated; cursor: grab; }
+  #gpu.dragging { cursor: grabbing; }
+  .panel { position: fixed; backdrop-filter: blur(8px);
+    background: rgba(14,16,21,.82); border: 1px solid rgba(255,255,255,.10);
+    border-radius: 10px; padding: 12px 14px; }
+  #stats { top: 12px; left: 12px; min-width: 210px; }
+  #stats .row { display: flex; justify-content: space-between; gap: 16px; }
+  #stats .k { color: #6f7686; }
+  #stats .v { color: #e8ecf4; }
+  #stats .big { font-size: 22px; line-height: 1.1; color: #fff; font-weight: 600; }
+  #stats .big small { font-size: 11px; color: #6f7686; font-weight: 400; }
+  #ui { top: 12px; right: 12px; width: 250px; }
+  #ui h1 { margin: 0 0 2px; font-size: 13px; color: #fff; letter-spacing: .3px; }
+  #ui .sub { color: #6f7686; margin-bottom: 10px; font-size: 11px; }
+  .ctl { margin: 9px 0; }
+  .ctl label { display: flex; justify-content: space-between; color: #9aa1b1; margin-bottom: 3px; }
+  .ctl label b { color: #e8ecf4; font-weight: 500; }
+  input[type=range] { width: 100%; accent-color: #6ea8ff; height: 16px; }
+  .btns { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  button { flex: 1 1 auto; background: #1b1f29; color: #cfd5e0; border: 1px solid rgba(255,255,255,.12);
+    border-radius: 6px; padding: 6px 8px; font: inherit; cursor: pointer; }
+  button:hover { background: #242a36; }
+  button.on { background: #2b4a7d; border-color: #4d7fc4; color: #fff; }
+  .note { margin-top: 10px; color: #5d6373; font-size: 10px; line-height: 1.5; }
+  #err { position: fixed; left: 12px; bottom: 12px; right: 12px; max-height: 40vh; overflow: auto;
+    background: rgba(60,12,12,.94); border: 1px solid #a33; border-radius: 8px; padding: 10px;
+    white-space: pre-wrap; display: none; }
+</style>
+</head>
+<body>
+<canvas id="gpu"></canvas>
+
+<div id="stats" class="panel">
+  <div class="big"><span id="fps">--</span> <small>fps</small></div>
+  <div class="row"><span class="k">frame</span><span class="v" id="ms">--</span></div>
+  <div class="row"><span class="k">internal</span><span class="v" id="res">--</span></div>
+  <div class="row"><span class="k">rays/s</span><span class="v" id="rays">--</span></div>
+  <div class="row"><span class="k">adapter</span><span class="v" id="adapter">--</span></div>
+</div>
+
+<div id="ui" class="panel">
+  <h1>Prism</h1>
+  <div class="sub">spectral light transport in the browser</div>
+
+  <div class="ctl"><label>internal resolution <b id="vRes">50%</b></label>
+    <input type="range" id="sRes" min="15" max="100" value="50"></div>
+  <div class="ctl"><label>wavelengths <b id="vWave">6</b></label>
+    <input type="range" id="sWave" min="3" max="24" value="6"></div>
+  <div class="ctl"><label>internal bounces <b id="vBounce">3</b></label>
+    <input type="range" id="sBounce" min="1" max="8" value="3"></div>
+  <div class="ctl"><label>dispersion <b id="vDisp">1.0x</b></label>
+    <input type="range" id="sDisp" min="0" max="400" value="100"></div>
+  <div class="ctl"><label>exposure <b id="vExp">2.0</b></label>
+    <input type="range" id="sExp" min="10" max="400" value="200"></div>
+  <div class="ctl"><label>antialiasing <b id="vAA">1x</b></label>
+    <input type="range" id="sAA" min="1" max="4" value="1"></div>
+
+  <div class="btns">
+    <button id="bPrism" class="on">prism</button>
+    <button id="bGem">brilliant</button>
+  </div>
+  <div class="btns">
+    <button id="bSpin" class="on">spin</button>
+    <button id="bPause">pause</button>
+    <button id="bSave">export png</button>
+  </div>
+
+  <div class="note">drag to orbit · wheel to zoom.<br>
+  Every pixel is a real ray traced through the facets, refracted per wavelength.</div>
+</div>
+
+<pre id="err"></pre>
+
+<script type="module">
+const canvas = document.getElementById('gpu');
+const errBox = document.getElementById('err');
+const fail = (m) => { errBox.style.display = 'block'; errBox.textContent += m + "\n"; console.error(m); };
+
+const MAX_PLANES = 80;
+
+// ---------------------------------------------------------------- geometry
+// A gem is just the intersection of half-spaces { x : dot(n,x) <= d }.
+// Ray vs convex polyhedron is then exact and cheap — no mesh, no BVH.
+
+function planesPrism() {
+  const r = 0.55, h = 0.75, P = [];
+  for (let k = 0; k < 3; k++) {
+    const a = Math.PI / 2 + k * 2 * Math.PI / 3;
+    P.push([Math.cos(a), Math.sin(a), 0, r]);
+  }
+  P.push([0, 0, 1, h]);
+  P.push([0, 0, -1, h]);
+  return P;
+}
+
+// A full brilliant: table, 8 stars, 8 bezels, 16 upper-girdle, a girdle band,
+// 16 lower-girdle and 8 pavilion mains — 65 facets.
+//
+// The angles are the real ones and the ring distances are derived, not guessed.
+// A facet plane that runs down to the girdle circle sits at distance sin(a). The
+// star ring is the interesting one: its plane passes through the MIDDLE of a
+// table edge, which is what makes a star facet a small triangle wedged between
+// the table and two bezels. Guessing that distance instead (as the first version
+// did) collapses the whole crown into a single smooth cone with a pinhead table.
+function planesBrilliant() {
+  const rad = Math.PI / 180;
+  const P = [];
+
+  const A_BEZEL = 34.5 * rad, A_STAR = 22.0 * rad, A_UPPER = 42.5 * rad;
+  const A_MAIN = 40.75 * rad, A_LOWER = 42.5 * rad;
+
+  const TABLE_R = 0.53;                                     // table radius / girdle radius (real ~53-58%)
+  const TABLE_Y = (1 - TABLE_R) * Math.tan(A_BEZEL);        // height where the bezel meets the table edge
+
+  P.push([0, 1, 0, TABLE_Y]);                               // table
+
+  const ring = (count, off, a, d, down) => {
+    const ny = down ? -Math.cos(a) : Math.cos(a);
+    for (let k = 0; k < count; k++) {
+      const t = off + k * 2 * Math.PI / count;
+      P.push([Math.sin(a) * Math.cos(t), ny, Math.sin(a) * Math.sin(t), d]);
+    }
+  };
+
+  // Stars: through the midpoint of a table edge, half a step off the bezels.
+  const starR = TABLE_R * Math.cos(Math.PI / 8);
+  const starD = Math.sin(A_STAR) * starR + Math.cos(A_STAR) * TABLE_Y;
+  ring(8, Math.PI / 8, A_STAR, starD, false);
+
+  ring(8,  0.0,          A_BEZEL, Math.sin(A_BEZEL), false);          // bezel kites, down to the girdle
+  // The girdle facets are pulled 3% inside the girdle circle so they actually
+  // bind near it. Two cones that both touch the girdle are nested, and the
+  // shallower one simply hides the other — which is how 16 facets quietly
+  // become 0.
+  ring(16, Math.PI / 16, A_UPPER, Math.sin(A_UPPER) * 0.97, false);   // upper girdle
+
+  for (let k = 0; k < 8; k++) {                             // girdle band
+    const t = k * 2 * Math.PI / 8;
+    P.push([Math.cos(t), 0, Math.sin(t), 1.0]);
+  }
+
+  ring(16, Math.PI / 16, A_LOWER, Math.sin(A_LOWER) * 0.97, true);    // lower girdle
+  ring(8,  0.0,          A_MAIN,  Math.sin(A_MAIN), true);            // pavilion mains to the culet
+  return P;
+}
+
+// Diamond, per Cauchy: n = A + B/lambda^2. A,B are the same numbers the
+// Python reference uses, so the two can be checked against each other.
+const MAT_DIAMOND = { A: 2.38, B: 0.0115 };
+
+// A prism is glass, not diamond. Reusing the diamond constants is why the
+// "prism" preset rendered as a grey wedge: at n = 2.38 the critical angle is
+// 24.8 degrees, so nearly every ray total-internally-reflected and almost
+// nothing transmitted through the far face to carry a spectrum out. These are
+// BK7-ish Cauchy constants, which is what a real glass prism is made of.
+const MAT_GLASS = { A: 1.5046, B: 0.0042 };
+
+let MAT = MAT_DIAMOND;
+
+let currentPlanes = planesPrism();
+let preset = 'prism';
+
+// ---------------------------------------------------------------- wgsl
+const WGSL = /* wgsl */ `
+struct Params {
+  camPos   : vec4<f32>,
+  camRight : vec4<f32>,
+  camUp    : vec4<f32>,
+  camFwd   : vec4<f32>,
+  size     : vec4<f32>,   // w, h, time, exposure
+  opts     : vec4<f32>,   // bounces, waveCount, aaCount, dispersionscale
+  mat      : vec4<f32>,   // cauchyA, cauchyB, planeCount, unused
+};
+struct PlaneData { p : array<vec4<f32>, ${MAX_PLANES}> };
+@group(0) @binding(0) var<uniform> U : Params;
+@group(0) @binding(1) var<uniform> G : PlaneData;
+
+struct Refr { ok : bool, d : vec3<f32> };
+
+const PI = 3.14159265359;
+
+fn luminance(c : vec3<f32>) -> f32 { return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722)); }
+
+// A studio, not a black room. Gems look like gems because a large part of
+// the surroundings is bright: every facet is a mirror aimed somewhere, and if
+// most directions are black, most facets come back black. Broad lights plus a
+// lit dome is what actually makes a stone sparkle.
+fn env(d : vec3<f32>) -> vec3<f32> {
+  // Dark surround, bright softboxes. Contrast is what reads as sparkle: a
+  // facet lit by a bright box sitting next to a facet showing darkness
+  // glitters. A uniformly bright room turns every facet the same flat grey —
+  // which is exactly what the previous version did.
+  var c = vec3<f32>(0.10, 0.11, 0.13);
+  c = c + vec3<f32>(0.34, 0.36, 0.42) * smoothstep(0.0, 0.7, d.y);       // sky
+  c = c + vec3<f32>(0.18, 0.18, 0.20) * smoothstep(0.1, -0.6, d.y);      // floor bounce
+
+  // Large softboxes: big enough that many facets catch one, rare enough that
+  // the gaps between them stay dark.
+  let b1 = normalize(vec3<f32>( 0.30,  0.72,  0.62));
+  let b2 = normalize(vec3<f32>(-0.72,  0.46,  0.52));
+  let b3 = normalize(vec3<f32>( 0.88,  0.22, -0.42));
+  let b4 = normalize(vec3<f32>(-0.28,  0.80, -0.53));
+  let b5 = normalize(vec3<f32>( 0.10, -0.45,  0.89));
+  c = c + vec3<f32>(1.00, 0.97, 0.93) * smoothstep(0.855, 0.965, dot(d, b1)) * 8.0;
+  c = c + vec3<f32>(0.92, 0.96, 1.00) * smoothstep(0.870, 0.970, dot(d, b2)) * 6.5;
+  c = c + vec3<f32>(1.00, 0.94, 0.86) * smoothstep(0.880, 0.972, dot(d, b3)) * 7.0;
+  c = c + vec3<f32>(0.90, 0.95, 1.00) * smoothstep(0.865, 0.968, dot(d, b4)) * 6.0;
+  c = c + vec3<f32>(1.00, 0.99, 0.96) * smoothstep(0.890, 0.975, dot(d, b5)) * 7.5;
+
+  // A few tight points for hard glints.
+  let p1 = normalize(vec3<f32>( 0.45,  0.85,  0.28));
+  let p2 = normalize(vec3<f32>(-0.55,  0.20,  0.81));
+  let p3 = normalize(vec3<f32>( 0.25,  0.10, -0.96));
+  c = c + vec3<f32>(1.00, 1.00, 1.00) * pow(max(dot(d, p1), 0.0),  900.0) * 26.0;
+  c = c + vec3<f32>(1.00, 1.00, 1.00) * pow(max(dot(d, p2), 0.0),  700.0) * 22.0;
+  c = c + vec3<f32>(1.00, 1.00, 1.00) * pow(max(dot(d, p3), 0.0), 1100.0) * 30.0;
+  return c;
+}
+
+fn fresnelR(cosI : f32, eta : f32) -> f32 {
+  let s2 = eta * eta * (1.0 - cosI * cosI);
+  if (s2 >= 1.0) { return 1.0; }
+  let cosT = sqrt(1.0 - s2);
+  let rs = (eta * cosI - cosT) / (eta * cosI + cosT);
+  let rp = (cosI - eta * cosT) / (cosI + eta * cosT);
+  return 0.5 * (rs * rs + rp * rp);
+}
+
+fn refractD(d : vec3<f32>, n : vec3<f32>, eta : f32) -> Refr {
+  let cosI = -dot(d, n);
+  let s2 = eta * eta * (1.0 - cosI * cosI);
+  if (s2 > 1.0) { return Refr(false, vec3<f32>(0.0)); }
+  let cosT = sqrt(1.0 - s2);
+  return Refr(true, eta * d + (eta * cosI - cosT) * n);
+}
+
+// Ray vs convex polyhedron. It must compute BOTH slabs — entry and exit.
+// Taking only the largest front-face hit is the classic bug: a ray that misses
+// the solid entirely still reports a positive entry, because any plane it
+// violates from the outside yields a positive t. Without the exit test the
+// stone appears to fill the whole screen and everything downstream is garbage.
+fn intersectEntry(ro : vec3<f32>, rd : vec3<f32>) -> vec4<f32> {
+  var tEnter = -1e30;
+  var tExit = 1e30;
+  var nEnter = vec3<f32>(0.0, 1.0, 0.0);
+  let count = u32(U.mat.z);
+  for (var i = 0u; i < count; i = i + 1u) {
+    let pl = G.p[i];
+    let denom = dot(pl.xyz, rd);
+    let dist = pl.w - dot(pl.xyz, ro);
+    if (abs(denom) < 1e-9) {
+      if (dist < 0.0) { return vec4<f32>(-1e31, 0.0, 0.0, 0.0); }
+    } else {
+      let t = dist / denom;
+      if (denom < 0.0) {
+        if (t > tEnter) { tEnter = t; nEnter = pl.xyz; }
+      } else {
+        if (t < tExit) { tExit = t; }
+      }
+    }
+  }
+  if (tEnter > tExit || tExit < 0.0) { return vec4<f32>(-1e31, 0.0, 0.0, 0.0); }
+  return vec4<f32>(tEnter, nEnter);
+}
+
+// From a point inside, the exit is the min of the "back face" hits.
+fn intersectExit(p : vec3<f32>, rd : vec3<f32>) -> vec4<f32> {
+  var tExit = 1e30;
+  var nExit = vec3<f32>(0.0, 1.0, 0.0);
+  let count = u32(U.mat.z);
+  for (var i = 0u; i < count; i = i + 1u) {
+    let pl = G.p[i];
+    let denom = dot(pl.xyz, rd);
+    if (denom > 1e-9) {
+      let t = (pl.w - dot(pl.xyz, p)) / denom;
+      if (t < tExit) { tExit = t; nExit = pl.xyz; }
+    }
+  }
+  return vec4<f32>(tExit, nExit);
+}
+
+// Wavelength -> sRGB (Bruton). Same curve as the Python reference.
+fn wavelengthToRGB(wl : f32) -> vec3<f32> {
+  var r = 0.0; var g = 0.0; var b = 0.0;
+  if (wl >= 380.0 && wl < 440.0)      { r = -(wl - 440.0) / 60.0; g = 0.0; b = 1.0; }
+  else if (wl < 490.0)                { r = 0.0; g = (wl - 440.0) / 50.0; b = 1.0; }
+  else if (wl < 510.0)                { r = 0.0; g = 1.0; b = -(wl - 510.0) / 20.0; }
+  else if (wl < 580.0)                { r = (wl - 510.0) / 70.0; g = 1.0; b = 0.0; }
+  else if (wl < 645.0)                { r = 1.0; g = -(wl - 645.0) / 65.0; b = 0.0; }
+  else if (wl <= 780.0)               { r = 1.0; g = 0.0; b = 0.0; }
+  var f = 1.0;
+  if (wl < 420.0)      { f = 0.3 + 0.7 * (wl - 380.0) / 40.0; }
+  else if (wl > 700.0) { f = 0.3 + 0.7 * (780.0 - wl) / 80.0; }
+  return vec3<f32>(r, g, b) * f;
+}
+
+// One wavelength's journey: in through a facet, bounce inside, out to the eye.
+fn tracePath(ro : vec3<f32>, rd : vec3<f32>, nGem : f32) -> f32 {
+  var lumi = 0.0;
+  let e = intersectEntry(ro, rd);
+  let nEnt = e.yzw;
+  var pos = ro + rd * e.x;
+
+  // Fresnel reflection off the front facet — the surface highlight.
+  let cosI0 = clamp(-dot(rd, nEnt), 1e-4, 1.0);
+  let R0 = fresnelR(cosI0, 1.0 / nGem);
+  lumi = lumi + luminance(env(reflect(rd, nEnt))) * R0;
+
+  let refr = refractD(rd, nEnt, 1.0 / nGem);
+  if (!refr.ok) { return lumi; }
+  var dir = refr.d;
+  var w = 1.0 - R0;
+
+  let bounces = i32(U.opts.x);
+  for (var b = 0; b < bounces; b = b + 1) {
+    let x = intersectExit(pos, dir);
+    pos = pos + dir * x.x;
+    var nrm = x.yzw;
+    if (dot(dir, nrm) < 0.0) { nrm = -nrm; }
+    let cosIc = clamp(-dot(dir, nrm), 1e-4, 1.0);
+    let R = fresnelR(cosIc, nGem);
+    let r2 = refractD(dir, nrm, nGem);
+    if (r2.ok) {
+      lumi = lumi + luminance(env(r2.d)) * w * (1.0 - R);
+      dir = reflect(dir, nrm);
+      w = w * R;
+    } else {
+      dir = reflect(dir, nrm);   // total internal reflection: light is kept
+    }
+    pos = pos + dir * 2e-4;
+    if (w < 1e-3) { break; }
+  }
+  return lumi;
+}
+
+@vertex fn vs(@builtin(vertex_index) vi : u32) -> @builtin(position) vec4<f32> {
+  var p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
+  return vec4<f32>(p[vi], 0.0, 1.0);
+}
+
+@fragment fn fs(@builtin(position) fc : vec4<f32>) -> @location(0) vec4<f32> {
+  let W = U.size.x;
+  let H = U.size.y;
+  let waveCount = i32(U.opts.y);
+  let aaCount = i32(U.opts.z);
+  let dispScale = U.opts.w;
+
+  var col = vec3<f32>(0.0);
+  var valid = 0.0;
+
+  var offsets = array<vec2<f32>, 4>(
+    vec2<f32>( 0.0,  0.0), vec2<f32>( 0.5,  0.0),
+    vec2<f32>( 0.0,  0.5), vec2<f32>( 0.5,  0.5));
+
+  for (var s = 0; s < aaCount; s = s + 1) {
+    let jitter = offsets[s] - vec2<f32>(0.25);
+    let px = fc.x + jitter.x;
+    let py = fc.y + jitter.y;
+    var uv = vec2<f32>((px - W * 0.5) / H, -(py - H * 0.5) / H);
+
+    let rd = normalize(U.camFwd.xyz + uv.x * U.camRight.xyz + uv.y * U.camUp.xyz);
+    let ro = U.camPos.xyz;
+
+    let e0 = intersectEntry(ro, rd);
+    if (e0.x < 0.0) {
+      // Flat backdrop. Deliberately a constant rather than the environment, so an
+      // exported frame has a single uniform background colour and composites onto
+      // a page of that colour with no visible edge. env() is still what the gem
+      // itself reflects — this only affects rays that miss it.
+      col = col + vec3<f32>(0.0060, 0.0064, 0.0077);
+      valid = valid + 1.0;
+    } else {
+      var acc = vec3<f32>(0.0);
+      var norm = 0.0;
+      for (var k = 0; k < waveCount; k = k + 1) {
+        let lam = mix(400.0, 700.0, (f32(k) + 0.5) / f32(waveCount));
+        let l = lam / 1000.0;
+        let nGem = U.mat.x + U.mat.y * dispScale / (l * l);
+        let sp = wavelengthToRGB(lam);
+        let lum = tracePath(ro, rd, nGem);
+        acc = acc + sp * lum;
+        norm = norm + luminance(sp);
+      }
+      col = col + acc / max(norm, 1e-5);
+      valid = valid + 1.0;
+    }
+  }
+
+  col = col / max(valid, 1.0);
+  col = col * U.size.w;
+  col = col / (1.0 + col);                       // Reinhard
+  col = pow(max(col, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.2));
+  return vec4<f32>(col, 1.0);
+}
+`;
+
+// ---------------------------------------------------------------- setup
+async function init() {
+  if (!navigator.gpu) throw new Error("WebGPU not available in this browser.");
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+  if (!adapter) throw new Error("No WebGPU adapter found.");
+  const device = await adapter.requestDevice();
+  device.lost.then(i => fail("device lost: " + (i && i.message)));
+  device.addEventListener?.('uncapturederror', e => fail("gpu error: " + e.error.message));
+
+  let info = adapter.info || {};
+  document.getElementById('adapter').textContent =
+    ((info.vendor || 'gpu') + ' ' + (info.architecture || '')).trim();
+
+  const ctx = canvas.getContext('webgpu');
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  ctx.configure({ device, format, alphaMode: 'opaque' });
+
+  const paramsBuf = device.createBuffer({ size: 7 * 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const planeBuf = device.createBuffer({ size: MAX_PLANES * 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+
+  const module = device.createShaderModule({ code: WGSL });
+  const iInfo = await module.getCompilationInfo?.();
+  if (iInfo && iInfo.messages) {
+    for (const m of iInfo.messages) {
+      if (m.type === 'error') fail(`shader ${m.lineNum}:${m.linePos} ${m.message}`);
+    }
+  }
+
+  const pipeline = device.createRenderPipeline({
+    layout: 'auto',
+    vertex: { module, entryPoint: 'vs' },
+    fragment: { module, entryPoint: 'fs', targets: [{ format }] },
+    primitive: { topology: 'triangle-list' },
+  });
+
+  const paramsData = new Float32Array(7 * 4);
+  const planeData = new Float32Array(MAX_PLANES * 4);
+
+  // ---- camera (orbit) ----
+  const cam = { yaw: 0.6, pitch: 0.25, dist: 4.2, spin: true };
+  const eye = [0, 0, 0], right = [0, 0, 0], up = [0, 0, 0], fwd = [0, 0, 0];
+  function updateCamera(t) {
+    if (cam.spin) cam.yaw += 0.0045;
+    const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+    const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+    eye[0] = cam.dist * cp * sy; eye[1] = cam.dist * sp; eye[2] = cam.dist * cp * cy;
+    fwd[0] = -eye[0]; fwd[1] = -eye[1]; fwd[2] = -eye[2];
+    let l = Math.hypot(fwd[0], fwd[1], fwd[2]) || 1;
+    fwd[0] /= l; fwd[1] /= l; fwd[2] /= l;
+    const worldUp = [0, 1, 0];
+    right[0] = fwd[1] * worldUp[2] - fwd[2] * worldUp[1];
+    right[1] = fwd[2] * worldUp[0] - fwd[0] * worldUp[2];
+    right[2] = fwd[0] * worldUp[1] - fwd[1] * worldUp[0];
+    l = Math.hypot(right[0], right[1], right[2]) || 1;
+    right[0] /= l; right[1] /= l; right[2] /= l;
+    up[0] = right[1] * fwd[2] - right[2] * fwd[1];
+    up[1] = right[2] * fwd[0] - right[0] * fwd[2];
+    up[2] = right[0] * fwd[1] - right[1] * fwd[0];
+  }
+
+  // ---- controls ----
+  let renderW = 0, renderH = 0;   // declared before controls: a slider calls resize() on init
+  let lastInputMs = performance.now();   // drives auto-refine
+  let forceDraft = false;                // set by bench() so measurements use the interactive settings
+  let effAA = 1, effWave = 6;
+  const el = id => document.getElementById(id);
+  const S = {
+    res: 0.5, wave: 6, bounce: 3, disp: 1.0, exp: 1.0, aa: 1,
+  };
+  const bind = (id, key, fmt, scale) => {
+    const input = el(id), label = el('v' + id.slice(1));
+    const apply = () => {
+      S[key] = parseFloat(input.value) * (scale || 1);
+      label.textContent = fmt(S[key]);
+      lastInputMs = performance.now();
+      if (key === 'res') resize();
+    };
+    input.addEventListener('input', apply); apply();
+  };
+  bind('sRes', 'res', v => Math.round(v * 100) + '%', 0.01);
+  bind('sWave', 'wave', v => String(v), 1);
+  bind('sBounce', 'bounce', v => String(v), 1);
+  bind('sDisp', 'disp', v => v.toFixed(1) + 'x', 0.01);
+  bind('sExp', 'exp', v => v.toFixed(1), 0.01);
+  bind('sAA', 'aa', v => String(v), 1);
+
+  const setPreset = (p) => {
+    preset = p;
+    currentPlanes = (p === 'prism') ? planesPrism() : planesBrilliant();
+    // The two presets are different materials, not just different shapes.
+    MAT = (p === 'prism') ? MAT_GLASS : MAT_DIAMOND;
+    el('bPrism').classList.toggle('on', p === 'prism');
+    el('bGem').classList.toggle('on', p === 'brilliant');
+  };
+  el('bPrism').onclick = () => setPreset('prism');
+  el('bGem').onclick = () => setPreset('brilliant');
+  // Normalise once at startup: the initial geometry, material and button state
+  // are set by this and nothing else, so they cannot drift apart.
+  setPreset(preset);
+  el('bSpin').onclick = () => { cam.spin = !cam.spin; el('bSpin').classList.toggle('on', cam.spin); };
+  el('bPause').onclick = () => { running = !running; el('bPause').classList.toggle('on', !running); };
+  el('bSave').onclick = () => { exportPng().catch(e => fail('export failed: ' + e.message)); };
+
+  // ---- interaction ----
+  let dragging = false, lx = 0, ly = 0;
+  canvas.addEventListener('pointerdown', e => {
+    dragging = true; lx = e.clientX; ly = e.clientY;
+    // Grabbing the stone stops the turntable. Letting go then settles into a
+    // crisp still, instead of the view drifting away from a half-finished one.
+    cam.spin = false; el('bSpin').classList.remove('on');
+    lastInputMs = performance.now(); canvas.classList.add('dragging');
+  });
+  window.addEventListener('pointerup', () => { dragging = false; canvas.classList.remove('dragging'); });
+  window.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    cam.yaw -= (e.clientX - lx) * 0.006;
+    cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch + (e.clientY - ly) * 0.006));
+    lx = e.clientX; ly = e.clientY;
+    lastInputMs = performance.now();
+  });
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    cam.dist = Math.max(1.6, Math.min(14, cam.dist * (1 + Math.sign(e.deltaY) * 0.08)));
+    lastInputMs = performance.now();
+  }, { passive: false });
+
+  // ---- sizing ----
+  function resize() {
+    const dpr = 1;                       // internal resolution is ours to choose
+    // res is a FRACTION of the canvas element, not a pixel count. An out-of-range
+    // value asks the device for a texture it cannot make; that error then poisons
+    // every later call with "invalid due to a previous error", which is a
+    // confusing way to find out about a typo. Clamp instead.
+    S.res = Math.min(2, Math.max(0.05, Number(S.res) || 0.5));
+    const cssW = Math.max(1, canvas.clientWidth), cssH = Math.max(1, canvas.clientHeight);
+    renderW = Math.max(1, Math.floor(cssW * S.res * dpr));
+    renderH = Math.max(1, Math.floor(cssH * S.res * dpr));
+    canvas.width = renderW; canvas.height = renderH;
+    el('res').textContent = `${renderW}x${renderH}`;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---- render loop ----
+  let running = true;
+  let last = performance.now(), acc = 0, frames = 0, t0 = performance.now();
+  let fpsShown = 0, msShown = 0;
+
+  function packUniforms(time, exposure, aa, wave) {
+    paramsData.set(eye, 0);       paramsData[3] = 0;
+    paramsData.set(right, 4);     paramsData[7] = 0;
+    paramsData.set(up, 8);        paramsData[11] = 0;
+    paramsData.set(fwd, 12);      paramsData[15] = 0;
+    paramsData[16] = renderW; paramsData[17] = renderH; paramsData[18] = time; paramsData[19] = exposure;
+    paramsData[20] = S.bounce; paramsData[21] = wave; paramsData[22] = aa; paramsData[23] = S.disp;
+    paramsData[24] = MAT.A; paramsData[25] = MAT.B; paramsData[26] = currentPlanes.length; paramsData[27] = 0;
+    for (let i = 0; i < MAX_PLANES; i++) {
+      const p = currentPlanes[i] || [0, 0, 0, 1e9];
+      planeData[i * 4] = p[0]; planeData[i * 4 + 1] = p[1];
+      planeData[i * 4 + 2] = p[2]; planeData[i * 4 + 3] = p[3];
+    }
+  }
+
+  const bindGroup = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [{ binding: 0, resource: { buffer: paramsBuf } }, { binding: 1, resource: { buffer: planeBuf } }],
+  });
+
+  // One frame of work, kept out of the rAF loop so it can be timed directly.
+  // rAF is throttled to zero whenever the tab is not visible, so an FPS
+  // reading from a background tab means nothing.
+  let refinedDrawn = false;
+  function drawScene(now) {
+    updateCamera(now * 0.001);
+    // Auto-refine. Once the view has truly stopped — nothing being dragged, and
+    // the turntable not spinning — re-render once at higher AA and more
+    // wavelengths, then rest. "Once, then rest" matters: a refined frame costs
+    // ~140 ms here, so repeating it every frame would be a permanent stutter
+    // rather than a settle, and it would keep the GPU busy forever on a page
+    // nobody is touching.
+    const settled = !forceDraft && !cam.spin && (performance.now() - lastInputMs > 600);
+    if (settled && refinedDrawn) return false;            // already showing the refined frame
+    effAA = settled ? Math.max(S.aa, 4) : S.aa;
+    effWave = settled ? Math.max(S.wave, 16) : S.wave;
+    refinedDrawn = settled;
+    packUniforms(now * 0.001, S.exp, effAA, effWave);
+    device.queue.writeBuffer(paramsBuf, 0, paramsData);
+    device.queue.writeBuffer(planeBuf, 0, planeData);
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginRenderPass({
+      colorAttachments: [{
+        view: ctx.getCurrentTexture().createView(),
+        clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store',
+      }],
+    });
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(3);
+    pass.end();
+    device.queue.submit([enc.finish()]);
+    return true;
+  }
+
+  // Render one frame into an offscreen texture and read it back as a PNG.
+  // This is the same path a "Sparkle Card" export would use, so it is real
+  // product work rather than a test hook.
+  async function captureDataUrl() {
+    const w = renderW, h = renderH;
+    const tex = device.createTexture({
+      size: [w, h], format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+    });
+    const t = performance.now() * 0.001;
+    updateCamera(t);
+    packUniforms(t, S.exp, Math.max(S.aa, 4), Math.max(S.wave, 16));   // exports are always full quality
+    device.queue.writeBuffer(paramsBuf, 0, paramsData);
+    device.queue.writeBuffer(planeBuf, 0, planeData);
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginRenderPass({
+      colorAttachments: [{ view: tex.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' }],
+    });
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(3);
+    pass.end();
+
+    const bytesPerRow = Math.ceil(w * 4 / 256) * 256;
+    const readBuf = device.createBuffer({
+      size: bytesPerRow * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    enc.copyTextureToBuffer({ texture: tex }, { buffer: readBuf, bytesPerRow }, [w, h]);
+    device.queue.submit([enc.finish()]);
+    await readBuf.mapAsync(GPUMapMode.READ);
+    const src = new Uint8Array(readBuf.getMappedRange().slice(0));
+    readBuf.unmap(); readBuf.destroy(); tex.destroy();
+
+    const c2 = document.createElement('canvas');
+    c2.width = w; c2.height = h;
+    const cx = c2.getContext('2d');
+    const img = cx.createImageData(w, h);
+    const swap = (format === 'bgra8unorm' || format === 'bgra8unorm-srgb');
+    for (let y = 0; y < h; y++) {
+      const off = y * w * 4;
+      img.data.set(src.subarray(y * bytesPerRow, y * bytesPerRow + w * 4), off);
+      if (swap) {
+        for (let x = 0; x < w; x++) {
+          const o = off + x * 4;
+          const r = img.data[o]; img.data[o] = img.data[o + 2]; img.data[o + 2] = r;
+        }
+      }
+    }
+    cx.putImageData(img, 0, 0);
+    return c2.toDataURL('image/png');
+  }
+
+  async function exportPng() {
+    const url = await captureDataUrl();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'prism-' + preset + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    return url.length;
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!running) { last = now; return; }
+    // Count only frames we actually submitted. While the view is resting on a
+    // finished render there is nothing to measure, so the readout freezes at the
+    // last real measurement instead of reporting the display refresh rate.
+    if (!drawScene(now)) { last = now; return; }
+
+    const dt = now - last; last = now;
+    acc += dt; frames++;
+    if (acc >= 500) {
+      fpsShown = (frames * 1000 / acc);
+      msShown = acc / frames;
+      el('fps').textContent = fpsShown.toFixed(1);
+      el('ms').textContent = msShown.toFixed(1) + ' ms';
+      const rays = renderW * renderH * S.wave * S.aa * S.bounce / (msShown / 1000);
+      el('rays').textContent = rays > 1e6 ? (rays / 1e6).toFixed(1) + 'M' : Math.round(rays / 1e3) + 'k';
+      acc = 0; frames = 0;
+    }
+  }
+  requestAnimationFrame(frame);
+
+  window.__prism = {
+    get stats() {
+      return { fps: fpsShown, ms: msShown, w: renderW, h: renderH, wave: S.wave, bounce: S.bounce, aa: S.aa, preset, effAA, effWave };
+    },
+    configure(o = {}) {
+      lastInputMs = performance.now();
+      refinedDrawn = false;                 // any change invalidates the resting frame
+      if (o.preset) setPreset(o.preset);
+      if (o.res !== undefined) { S.res = o.res; resize(); }
+      if (o.wave !== undefined) S.wave = o.wave;
+      if (o.bounce !== undefined) S.bounce = o.bounce;
+      if (o.aa !== undefined) S.aa = o.aa;
+      if (o.exp !== undefined) S.exp = o.exp;
+      return this.stats;
+    },
+    capture: () => captureDataUrl(),
+    exportPng: () => exportPng(),
+    info: () => ({
+      eye: eye.slice(), fwd: fwd.slice(), dist: cam.dist, yaw: cam.yaw, pitch: cam.pitch,
+      planes: currentPlanes.map(p => p.slice()), w: renderW, h: renderH, format,
+    }),
+    setCamera: (o = {}) => { Object.assign(cam, o); return { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, spin: cam.spin }; },
+    // Advance exactly one frame the way the animation loop would, and report
+    // whether it drew anything. rAF is throttled to zero in a background tab, so
+    // without this the draw path — auto-refine included — cannot be exercised at
+    // all outside a visible window. Same reason bench() exists.
+    tick: (now = performance.now()) => drawScene(now),
+    // Times the GPU directly: submit, wait for completion, repeat. Immune to
+    // vsync and to the tab being backgrounded.
+    async bench(frames = 20) {
+      forceDraft = true;              // measure the interactive settings, not the refined ones
+      await device.queue.onSubmittedWorkDone();
+      const t0 = performance.now();
+      try {
+        for (let i = 0; i < frames; i++) {
+          drawScene(performance.now() * 0.001 + i * 0.016);
+          await device.queue.onSubmittedWorkDone();
+        }
+      } finally {
+        forceDraft = false;
+      }
+      const ms = (performance.now() - t0) / frames;
+      return {
+        msPerFrame: +ms.toFixed(2), fpsEquivalent: +(1000 / ms).toFixed(1),
+        w: renderW, h: renderH, wave: S.wave, bounce: S.bounce, aa: S.aa, preset,
+      };
+    },
+  };
+  window.__prismReady = true;
+}
+
+try {
+  await init();
+} catch (e) {
+  fail("init failed: " + (e && e.message ? e.message : e));
+}
+</script>
+</body>
+</html>

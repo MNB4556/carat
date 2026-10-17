@@ -1,0 +1,259 @@
+/* Prism case study.
+   Design premise: the renderer's own backdrop is a flat #222326, so the page is
+   that exact colour and the hero frame has no edge — the stone floats in the
+   page instead of sitting in a box. Everything else is hairlines and one
+   spectral rule, because dispersion is what the project is about. */
+
+:root {
+  --bg:          #222326;   /* must equal the render's backdrop, or the seam shows */
+  --ink:         #f3f1ed;
+  --ink-soft:    #c8c5bf;
+  --muted:       #918d87;
+  --rule:        rgba(255, 255, 255, 0.10);
+  --rule-strong: rgba(255, 255, 255, 0.20);
+  --link:        #6fe0cf;
+  --code:        #f0d9a0;
+
+  --s1: #8f74ff;  --s2: #5b9dff;  --s3: #4fd9c8;
+  --s4: #a9e05f;  --s5: #ffca5c;  --s6: #ff7b6b;
+  --spectrum: linear-gradient(92deg,
+    var(--s1), var(--s2) 20%, var(--s3) 40%, var(--s4) 60%, var(--s5) 80%, var(--s6));
+
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --measure: 44rem;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 17px/1.62 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: rgba(111, 224, 207, 0.28); }
+
+.wrap { width: min(var(--measure), 100% - 2.5rem); margin-inline: auto; }
+
+/* The one decorative element on the page, and it is on-theme: a beam of light
+   split into its wavelengths, pinned across the top of the viewport. */
+.spectrum {
+  position: fixed; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--spectrum); z-index: 50;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(111, 224, 207, 0.35);
+}
+a:hover { border-bottom-color: var(--link); }
+a:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
+
+code, .num {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  font-variant-numeric: tabular-nums;
+}
+code { color: var(--code); }
+
+/* ------------------------------------------------------------------ masthead */
+.masthead { border-bottom: 1px solid var(--rule); margin-top: 3px; }
+.masthead .wrap {
+  display: flex; flex-wrap: wrap; gap: 0.6rem 2rem;
+  align-items: baseline; justify-content: space-between;
+  padding: 1.3rem 0 1.15rem;
+}
+.who b { display: block; font-size: 1rem; letter-spacing: -0.01em; }
+.who span {
+  display: block; margin-top: 0.32rem;
+  font: 500 0.66rem var(--mono);
+  text-transform: uppercase; letter-spacing: 0.16em;
+  color: var(--muted);
+}
+.masthead nav { display: flex; flex-wrap: wrap; gap: 1.3rem; }
+.masthead nav a {
+  font-size: 0.82rem; color: var(--ink-soft); border-bottom: none;
+}
+.masthead nav a:hover { color: var(--link); }
+
+/* ---------------------------------------------------------------------- hero */
+.hero { padding: 4rem 0 0; }
+
+.eyebrow {
+  margin: 0 0 1.6rem;
+  font: 600 0.7rem var(--mono);
+  text-transform: uppercase; letter-spacing: 0.2em;
+  color: var(--link);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2.05rem, 5.6vw, 3.35rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+}
+.grad {
+  background: var(--spectrum);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+
+.lede {
+  margin: 1.6rem 0 0;
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+.lede strong { color: var(--ink); font-weight: 600; }
+
+/* measurements, as a strip rather than four boxes */
+.specs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  margin: 2.6rem 0 0;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.specs > span { padding: 1rem 1rem 1.05rem 0; }
+.specs b {
+  display: block;
+  font-size: 1.5rem; line-height: 1.1; letter-spacing: -0.025em;
+}
+.specs i {
+  display: block; margin-top: 0.38rem;
+  font: 500 0.66rem var(--mono); font-style: normal;
+  text-transform: uppercase; letter-spacing: 0.13em;
+  color: var(--muted);
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 2.2rem 0 0; }
+
+.btn {
+  display: inline-block;
+  padding: 0.7rem 1.15rem;
+  border: 1px solid var(--rule-strong);
+  background: transparent;
+  color: var(--ink);
+  font: 600 0.78rem var(--sans);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  text-decoration: none;
+}
+.btn:hover { border-color: var(--ink); background: rgba(255, 255, 255, 0.05); color: var(--ink); }
+.btn.primary {
+  background: var(--spectrum);
+  border-color: transparent;
+  color: #141519;
+  font-weight: 700;
+}
+.btn.primary:hover { filter: brightness(1.12); color: #141519; }
+
+/* The hero frame. No border and no plate: the page behind it is the same
+   colour as the render's backdrop, so the image dissolves and the stone
+   appears to float on the page. */
+.scene { margin: 3.6rem 0 0; }
+.scene img {
+  display: block;
+  width: 100%; max-width: 1400px; height: auto;
+  margin-inline: auto;
+  mix-blend-mode: lighten;
+}
+figcaption {
+  width: min(var(--measure), 100% - 2.5rem);
+  margin: 1.1rem auto 0;
+  font-size: 0.85rem; color: var(--muted);
+}
+figcaption b { color: var(--ink-soft); }
+
+/* ------------------------------------------------------------------ sections */
+section { border-top: 1px solid var(--rule); padding: 3.2rem 0; }
+
+.sh { display: flex; gap: 0.85rem; align-items: baseline; margin-bottom: 1.15rem; }
+.sn {
+  font: 700 0.78rem var(--mono);
+  background: var(--spectrum);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+h2 { margin: 0; font-size: 1.45rem; line-height: 1.2; letter-spacing: -0.025em; }
+
+h3 { margin: 2rem 0 0.5rem; font-size: 1.02rem; letter-spacing: -0.01em; }
+
+p { margin: 0 0 1.1rem; }
+ul, ol { margin: 0 0 1.1rem; padding-left: 1.25rem; }
+li { margin-bottom: 0.5rem; }
+.muted { color: var(--muted); }
+
+/* -------------------------------------------------------------------- tables */
+.table-scroll { overflow-x: auto; margin: 1.4rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+caption {
+  caption-side: top; text-align: left;
+  font-size: 0.83rem; color: var(--muted);
+  padding-bottom: 0.7rem;
+}
+th {
+  text-align: left; padding: 0.45rem 0.9rem 0.5rem 0;
+  font: 600 0.66rem var(--mono); text-transform: uppercase; letter-spacing: 0.13em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule-strong);
+}
+td { padding: 0.55rem 0.9rem 0.55rem 0; border-bottom: 1px solid var(--rule); }
+td.n, th.n { text-align: right; padding-right: 1.6rem; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr.total td { border-bottom: none; font-weight: 700; }
+tr.total td:first-child { font-weight: 400; color: var(--muted); }
+
+/* ------------------------------------------------------- numbered items (bugs) */
+.items { list-style: none; padding: 0; margin: 1.8rem 0 0; counter-reset: n; }
+.items > li {
+  position: relative;
+  padding-left: 3.1rem;
+  margin-bottom: 2.3rem;
+  counter-increment: n;
+}
+.items > li:last-child { margin-bottom: 0.6rem; }
+.items > li::before {
+  content: counter(n);
+  position: absolute; left: 0; top: -0.32rem;
+  font: 700 1.85rem/1 var(--mono);
+  background: var(--spectrum);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+.items h3 { margin: 0 0 0.45rem; }
+.items p:last-child { margin-bottom: 0; }
+.lesson {
+  display: block; margin-top: 0.7rem;
+  color: var(--ink-soft); font-style: italic;
+}
+
+/* ------------------------------------------------------------------ callouts */
+.callout {
+  margin: 1.7rem 0 0;
+  padding: 1.3rem 0;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.callout h3 { margin-top: 0; }
+.callout ul { margin-bottom: 0; }
+
+/* ----------------------------------------------------------------------- cta */
+.cta .lede { margin-bottom: 1.6rem; }
+
+footer {
+  border-top: 1px solid var(--rule);
+  padding: 1.9rem 0 3.2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+footer p { margin: 0 0 0.4rem; }
+
+@media (max-width: 34rem) {
+  .specs { grid-template-columns: 1fr 1fr; }
+  .items > li { padding-left: 2.5rem; }
+}

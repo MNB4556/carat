@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prism — a spectral ray tracer in raw WebGPU</title>
+<meta name="author" content="Nabil">
+<meta name="description" content="A physically-based spectral ray tracer for gemstones, written from scratch against raw WebGPU. One file, no dependencies, interactive in a browser.">
+<link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body>
+
+<div class="spectrum" aria-hidden="true"></div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="who">
+      <b>Nabil</b>
+      <span>Graphics &amp; front-end engineering</span>
+    </div>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#measured">Measurements</a>
+      <a href="#wrong">What went wrong</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ------------------------------------------------------------------ hero -->
+<div class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Prism · WebGPU renderer</p>
+    <h1>A physically-based <span class="grad">spectral ray tracer</span>, written from scratch against raw WebGPU.</h1>
+    <p class="lede">
+      No three.js. No framework. No build step. <strong>One 752-line HTML file</strong> that
+      intersects a 65-facet gem as 65 half-spaces and traces light at individual
+      wavelengths rather than as RGB — and still runs at interactive frame rates.
+    </p>
+
+    <div class="specs">
+      <span><b>65</b><i>facets, derived</i></span>
+      <span><b>400–700&nbsp;nm</b><i>sampled per ray</i></span>
+      <span><b>0</b><i>dependencies</i></span>
+      <span><b>9</b><i>bugs found &amp; fixed</i></span>
+    </div>
+
+    <div class="actions">
+      <a class="btn primary" href="../prism/web/gem.html">Run it</a>
+      <a class="btn" href="#how">How it works</a>
+      <a class="btn" href="#wrong">What went wrong</a>
+    </div>
+  </div>
+
+  <figure class="scene">
+    <img src="hero-brilliant.png" alt="A 65-facet brilliant cut rendered by the engine: a pale faceted stone seen from slightly above, its crown and pavilion visible against a flat near-black field." width="1400" height="979">
+    <figcaption>
+      <b>Fig. 1</b> — an actual frame, exported from the engine at 1400×979. Not a photo,
+      and not photorealistic: see <a href="#notdone">what's not done</a> for why.
+    </figcaption>
+  </figure>
+</div>
+
+<!-- ------------------------------------------------------------------- how -->
+<section id="how">
+<div class="wrap">
+  <div class="sh"><span class="sn">01</span><h2>Three decisions that make this hard</h2></div>
+  <p>
+    Rendering a shiny stone is easy — every engine ships an environment map and a
+    torus knot tutorial. Three choices here are not easy, and they are the whole
+    project.
+  </p>
+
+  <h3>1. Spectral, not RGB</h3>
+  <p>
+    A ray is not tinted red, green and blue. It carries a wavelength sampled from
+    400–700&nbsp;nm, and the stone's refractive index is computed from that
+    wavelength every single time. That is what makes <em>fire</em> real rather
+    than painted: the coloured flashes a diamond throws are dispersion, and
+    dispersion only exists if you compute it.
+  </p>
+
+  <h3>2. A gem as 65 half-spaces, not a triangle mesh</h3>
+  <p>
+    The stone is not a mesh. It is the intersection of 65 planes. A ray misses
+    the solid unless it is inside <em>every</em> half-space, which means one
+    ordered loop over 65 planes replaces a mesh traversal, a BVH, and every
+    floating-point normal you would otherwise interpolate. It is exact, it is
+    branch-free, and it fits in a uniform buffer.
+  </p>
+
+  <h3>3. From scratch</h3>
+  <p>
+    Buffers, bind groups, uniform layouts, the render pipeline, WGSL, the
+    readback path for PNG export — all of it, against the raw API. There is no
+    engine to blame and no abstraction to hide behind, which is precisely why it
+    was worth doing.
+  </p>
+
+  <h3>The facet geometry</h3>
+  <p>
+    The facet rings are not eyeballed. A facet that runs down to the girdle
+    circle sits at plane distance <code>sin(a)</code> for tilt <code>a</code>;
+    the table height follows from the crown angle and the table radius. The
+    resulting proportions come out at the textbook figures for a
+    34.5°&nbsp;/&nbsp;40.75° round brilliant without being tuned: a 53% table,
+    ~16% crown height, ~43% pavilion depth, ~59% total depth.
+  </p>
+
+  <div class="table-scroll">
+    <table>
+      <caption>Every facet in the stone — 65 planes, generated from seven parameters.</caption>
+      <thead>
+        <tr><th>Ring</th><th class="n">Count</th><th class="n">Angle from girdle plane</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Table</td><td class="n">1</td><td class="n">flat</td></tr>
+        <tr><td>Star facets</td><td class="n">8</td><td class="n">22°</td></tr>
+        <tr><td>Bezel (kite) facets</td><td class="n">8</td><td class="n">34.5°</td></tr>
+        <tr><td>Upper girdle facets</td><td class="n">16</td><td class="n">42.5°</td></tr>
+        <tr><td>Girdle band</td><td class="n">8</td><td class="n">vertical</td></tr>
+        <tr><td>Lower girdle facets</td><td class="n">16</td><td class="n">42.5°</td></tr>
+        <tr><td>Pavilion mains</td><td class="n">8</td><td class="n">40.75°</td></tr>
+        <tr class="total"><td>Total</td><td class="n">65</td><td class="n"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The optics</h3>
+  <ul>
+    <li><strong>Fresnel.</strong> At each surface the code splits the ray by angle. Diamond reflects <span class="num">17.2%</span> of light straight back at normal incidence — a sixth of it — which is exactly why it out-sparkles glass.</li>
+    <li><strong>Cauchy dispersion.</strong> <code>n(λ) = 2.38 + 0.0115/λ²</code>, giving a refractive-index spread of about <span class="num">0.048</span> across the visible range.</li>
+    <li><strong>Total internal reflection.</strong> Past the critical angle (<span class="num">24.4°</span> for diamond into air) the ray does not leave. The pavilion is a trap, and that trap is the point.</li>
+    <li><strong>Colour.</strong> Each wavelength is converted to RGB and weighted by luminance, so the spectrum reconstructs honestly instead of being invented.</li>
+  </ul>
+
+  <h3>Interactive, then still</h3>
+  <p>
+    Interact at 6 wavelengths with no anti-aliasing; once the view has been still
+    for 600&nbsp;ms the engine re-draws itself once at 4× AA and 16 wavelengths,
+    then <em>stops submitting work entirely</em> until something changes. A
+    refined frame costs about 140&nbsp;ms, so repeating it would be a permanent
+    stutter rather than a settle — and would keep the GPU busy forever on a page
+    nobody is touching.
+  </p>
+</div>
+</section>
+
+<!-- -------------------------------------------------------------- measured -->
+<section id="measured">
+<div class="wrap">
+  <div class="sh"><span class="sn">02</span><h2>What I measured</h2></div>
+  <p>
+    Timed on the GPU itself rather than with a frame counter — that distinction
+    matters more than it sounds, and the first bug below is what happens when you
+    get it wrong.
+  </p>
+
+  <div class="table-scroll">
+    <table>
+      <caption>65-facet brilliant at 912×638 unless stated. Milliseconds are the median of five runs.</caption>
+      <thead>
+        <tr><th>Configuration</th><th class="n">ms/frame</th><th class="n">fps</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Brilliant, 6 wavelengths, 3 bounces</td><td class="n">36</td><td class="n">28</td></tr>
+        <tr><td>Prism preset, same size</td><td class="n">15</td><td class="n">68</td></tr>
+        <tr><td>Brilliant, 2000×1400</td><td class="n">73</td><td class="n">14</td></tr>
+        <tr><td>20 wavelengths, 6 bounces, 2× AA — the top end</td><td class="n">248</td><td class="n">4</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <h3>Read the spread, not the digit</h3>
+    <p>
+      Five consecutive runs of <em>identical</em> settings gave 44.5, 35.5, 36.3,
+      36.7 and 36.3&nbsp;ms. An earlier reading of the same configuration was
+      21&nbsp;ms. A browser GPU is not reproducible to two digits, so I quote
+      medians and expect ±30%. A benchmark table without a spread is a table I
+      would not trust.
+    </p>
+  </div>
+</div>
+</section>
+
+<!-- ----------------------------------------------------------------- wrong -->
+<section id="wrong">
+<div class="wrap">
+  <div class="sh"><span class="sn">03</span><h2>Three ways my own benchmark lied to me</h2></div>
+  <p>
+    This is the part I would want a reader to look at. Every one of these bugs
+    produced a plausible number from a broken renderer, and every one was caught
+    by validating the output rather than the speed.
+  </p>
+
+  <ol class="items">
+    <li>
+      <h3>The benchmark that measured nothing</h3>
+      <p>
+        The renderer's resolution control is a <em>fraction</em> of the canvas. I
+        called it with <code>res: 912</code>, meaning "912 pixels wide". It read
+        that as "912 times the canvas", asked the GPU for a 1.2-million-pixel-wide
+        texture, failed validation, and then poisoned every subsequent GPU call
+        with <code>invalid due to a previous error</code>.
+      </p>
+      <p>
+        Through all of it, the benchmark reported a confident
+        <strong>63.5&nbsp;fps</strong> — because a pipeline that submits nothing is
+        extremely fast. I only caught it by opening the console.
+      </p>
+      <span class="lesson">An invalid pipeline benchmarks beautifully. Validate the output, not just the speed.</span>
+    </li>
+
+    <li>
+      <h3>The facets that were mathematically present and invisible</h3>
+      <p>
+        The 16 upper-girdle facets were generated correctly and showed up nowhere.
+        Two facet cones that both touch the girdle circle are <em>nested</em>: the
+        shallower cone is always further out, so it hides the steeper one
+        completely. Sixteen facets quietly became zero.
+      </p>
+      <span class="lesson">Geometry can be correct and still not be visible. Count facets in the pixels, not in the array.</span>
+    </li>
+
+    <li>
+      <h3>I guessed a distance instead of deriving it</h3>
+      <p>
+        I set the star facet plane distance by eye. The resulting cone sat below the
+        table and swallowed the entire crown — the first "brilliant" rendered as a
+        smooth dome with a pinhead table. The star plane has to pass through the
+        <strong>midpoint of a table edge</strong>; derived rather than guessed, the
+        star triangles appeared immediately.
+      </p>
+      <span class="lesson">Facet geometry is a derivation, not a vibe.</span>
+    </li>
+  </ol>
+
+  <p style="margin-top:2rem">
+    The full list runs to nine, including a probe that dispatched 65,536 workgroups
+    against a 65,535 limit and reported a number anyway, a ray-vs-polyhedron test
+    that computed only the entry slab so <em>every</em> ray reported a hit and the
+    stone filled the screen, a preset that was quietly authoring a *prism* with
+    diamond's refractive index, and one where my own arithmetic was wrong and the
+    code was right. All of them are written up in the project's verdict document.
+  </p>
+</div>
+</section>
+
+<!-- --------------------------------------------------------------- notdone -->
+<section id="notdone">
+<div class="wrap">
+  <div class="sh"><span class="sn">04</span><h2>What's not done</h2></div>
+  <p>
+    This is a correct engine that has not yet been art-directed, and the gap is
+    specific enough to name.
+  </p>
+  <div class="callout">
+    <ul>
+      <li><strong>It is not photorealistic, and I would not claim it is.</strong> The environment is an analytic function, not an HDRI. Without sharp bright-against-dark structure in the surroundings, the fire stays subtle — you can compute dispersion perfectly and still have nothing to refract.</li>
+      <li><strong>Nothing reads as coloured stone.</strong> Every material is a pure dielectric with a Cauchy index and no absorption, so a sapphire is impossible.</li>
+      <li><strong>The tone map is raw Reinhard</strong>, which flattens exactly the highlights a gem should flash with.</li>
+      <li><strong>The interactive loop cannot be tested headlessly.</strong> Browsers throttle <code>requestAnimationFrame</code> to zero in a background tab — measured, 0 frames in 1.5&nbsp;seconds — so everything above is driven through an API instead. I added a one-frame test hook for that reason.</li>
+    </ul>
+  </div>
+</div>
+</section>
+
+<!-- ---------------------------------------------------------------- second -->
+<section>
+<div class="wrap">
+  <div class="sh"><span class="sn">05</span><h2>Also shipped: The Directory</h2></div>
+  <p>
+    A second, deliberately different piece. A searchable directory of independent
+    jewellers who take on custom work — static HTML, no dependencies, no build
+    step, no server, runs off a local file. The engine above proves I can build
+    hard things; this one proves I finish and ship them.
+  </p>
+  <p class="muted">
+    It is also the lead list for the commercial version of the renderer, which is
+    the honest reason it exists.
+  </p>
+</div>
+</section>
+
+<!-- --------------------------------------------------------------- contact -->
+<section id="contact" class="cta">
+<div class="wrap">
+  <div class="sh"><span class="sn">06</span><h2>Work with me</h2></div>
+  <p class="lede">
+    I build graphics and performance-critical front-end work: WebGPU and WebGL,
+    rendering, simulation, and the unglamorous profiling that makes them fast.
+    Open to contract work and to roles.
+  </p>
+  <div class="actions">
+    <a class="btn primary" href="mailto:nabilbabaslimane@gmail.com">nabilbabaslimane@gmail.com</a>
+    <a class="btn" href="../prism/web/gem.html">Run the renderer</a>
+  </div>
+</div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Prism — a spectral gem renderer, built from scratch in raw WebGPU. One file, no dependencies.</p>
+  </div>
+</footer>
+
+</body>
+</html>

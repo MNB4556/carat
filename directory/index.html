@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Independent Jewellers — who does custom work</title>
+<meta name="description" content="A directory of independent jewellers who take on custom work: bespoke commissions, remodelling and design.">
+<link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <p class="eyebrow">Directory · custom work</p>
+      <h1>Independent Jewellers</h1>
+      <p class="tagline">Who takes on custom work, where they are, and how to reach them.</p>
+    </div>
+    <div class="progress" aria-label="Sourcing progress">
+      <div class="bar"><span id="bar"></span></div>
+      <p><strong id="sourcedCount">0</strong> of <span id="target">40</span> verified
+         · <span id="listedCount">0</span> listed</p>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <p class="banner" id="sampleBanner" hidden>
+    <strong>Sample data.</strong> The entries below are placeholders, so you can see the shape of
+    the thing. Replace them with real, verified jewellers before you publish this or email anyone.
+  </p>
+
+  <section class="controls" aria-label="Filters and sorting">
+    <div class="field grow">
+      <label for="q">Search</label>
+      <input id="q" type="search" placeholder="Name, city, specialism…" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="region">Region</label>
+      <select id="region"></select>
+    </div>
+    <div class="field">
+      <label for="spec">Specialism</label>
+      <select id="spec"></select>
+    </div>
+    <div class="field">
+      <label for="sort">Sort</label>
+      <select id="sort">
+        <option value="featured">Featured first</option>
+        <option value="name">Name (A–Z)</option>
+        <option value="city">City (A–Z)</option>
+      </select>
+    </div>
+    <div class="field check">
+      <input id="customOnly" type="checkbox">
+      <label for="customOnly">Custom work only</label>
+    </div>
+  </section>
+
+  <p class="resultline" id="resultLine" role="status" aria-live="polite"></p>
+
+  <section class="grid" id="grid"></section>
+  <p class="empty" id="empty" hidden>Nothing matches those filters.</p>
+
+  <section class="cta">
+    <h2>Run a workshop?</h2>
+    <p>Featured placement puts you at the top of the region you serve. One line to us and you are in.</p>
+    <a class="btn" href="mailto:nabilbabaslimane@gmail.com?subject=Directory%20listing">Get listed</a>
+  </section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p id="footNote"></p>
+  </div>
+</footer>
+
+<script src="data/jewellers.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

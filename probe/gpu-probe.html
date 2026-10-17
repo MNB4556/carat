@@ -1,0 +1,187 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>gpu-probe: running</title>
+<style>body{font:13px/1.5 monospace;background:#111;color:#ddd;margin:16px}pre{white-space:pre-wrap}</style>
+</head>
+<body>
+<pre id="out">running…</pre>
+<script>
+const out = { phase: "start" };
+const el = document.getElementById("out");
+function flush() { el.textContent = JSON.stringify(out, null, 2); }
+
+function withTimeout(p, ms, label) {
+  return Promise.race([
+    p,
+    new Promise((_, rej) => setTimeout(() => rej(new Error("timeout: " + label)), ms))
+  ]);
+}
+
+async function main() {
+  out.userAgent = navigator.userAgent;
+  out.hardwareConcurrency = navigator.hardwareConcurrency;
+  out.deviceMemoryGB = navigator.deviceMemory ?? null;
+  out.isSecureContext = window.isSecureContext;
+  out.hasWebGPU = !!navigator.gpu;
+
+  // --- WebGL baseline (works almost everywhere) ---
+  try {
+    const c = document.createElement("canvas");
+    const gl = c.getContext("webgl2") || c.getContext("webgl");
+    if (gl) {
+      const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+      out.webgl = {
+        api: gl.getParameter(gl.VERSION),
+        renderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+        vendor: dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
+        maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+        maxRenderbufferSize: gl.getParameter(gl.MAX_RENDERBUFFER_SIZE)
+      };
+    } else {
+      out.webgl = "unavailable";
+    }
+  } catch (e) { out.webgl = "error: " + e.message; }
+  flush();
+
+  if (!navigator.gpu) { out.phase = "no-webgpu"; flush(); return; }
+
+  // --- WebGPU adapter ---
+  let adapter;
+  try {
+    adapter = await withTimeout(navigator.gpu.requestAdapter({ powerPreference: "high-performance" }), 8000, "requestAdapter");
+  } catch (e) { out.phase = "adapter-error"; out.error = e.message; flush(); return; }
+
+  if (!adapter) { out.phase = "no-adapter"; flush(); return; }
+
+  try {
+    let info = adapter.info;
+    if (!info && adapter.requestAdapterInfo) info = await adapter.requestAdapterInfo();
+    out.adapter = info ? { vendor: info.vendor, architecture: info.architecture, device: info.device, description: info.description } : "no-info-api";
+  } catch (e) { out.adapter = "info-error: " + e.message; }
+
+  const L = adapter.limits || {};
+  out.limits = {
+    maxBufferSizeMB: L.maxBufferSize ? +(L.maxBufferSize / 1048576).toFixed(1) : null,
+    maxTextureDimension2D: L.maxTextureDimension2D ?? null,
+    maxStorageBufferBindingSizeMB: L.maxStorageBufferBindingSize ? +(L.maxStorageBufferBindingSize / 1048576).toFixed(1) : null,
+    maxComputeWorkgroupStorageSize: L.maxComputeWorkgroupStorageSize ?? null,
+    maxComputeInvocationsPerWorkgroup: L.maxComputeInvocationsPerWorkgroup ?? null
+  };
+  out.features = adapter.features ? Array.from(adapter.features) : null;
+  flush();
+
+  // --- Device ---
+  let device;
+  try {
+    const t0 = performance.now();
+    device = await withTimeout(adapter.requestDevice(), 8000, "requestDevice");
+    out.deviceRequestMs = +(performance.now() - t0).toFixed(1);
+  } catch (e) { out.phase = "device-error"; out.error = e.message; flush(); return; }
+  flush();
+
+  device.lost.then((i) => { out.deviceLost = i ? i.message : "unknown"; flush(); });
+
+  // --- Compute benchmark: 4M elements x 2000 dependent FMA ops each ---
+  const N = 1 << 22;            // 4,194,304 elements
+  const WG = 128;               // 4M/128 = 32768 workgroups (stays under the 65535 limit)
+  const OPS = 2000;
+  try {
+    const buf = device.createBuffer({ size: N * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const read = device.createBuffer({ size: N * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const module = device.createShaderModule({
+      code: `
+        @group(0) @binding(0) var<storage, read_write> data: array<f32>;
+        @compute @workgroup_size(${WG})
+        fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+          let i = gid.x;
+          var x = f32(i) * 0.000001;
+          for (var k: u32 = 0u; k < ${OPS}u; k = k + 1u) {
+            x = x * 1.0000001 + 0.0000001;
+          }
+          data[i] = x;
+        }`
+    });
+    const pipeline = device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
+    const bind = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: buf } }] });
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bind);
+    pass.dispatchWorkgroups(Math.ceil(N / WG));
+    pass.end();
+    enc.copyBufferToBuffer(buf, 0, read, 0, N * 4);
+    device.queue.submit([enc.finish()]);
+
+    const t0 = performance.now();
+    await withTimeout(read.mapAsync(GPUMapMode.READ), 20000, "mapAsync");
+    const gpuMs = performance.now() - t0;
+    const sample = new Float32Array(read.getMappedRange().slice(0, 4));
+    read.unmap();
+
+    // sanity: expected x for i=0 after OPS dependent FMAs
+    let expect = 0;
+    for (let k = 0; k < OPS; k++) expect = expect * 1.0000001 + 0.0000001;
+    out.compute = {
+      elements: N,
+      dependentOpsPerElement: OPS,
+      wallMs: +gpuMs.toFixed(1),
+      gflops: +((N * OPS * 2) / (gpuMs / 1000) / 1e9).toFixed(2),
+      sampleExpected: +expect.toFixed(9),
+      sampleActual: +sample[0].toFixed(9),
+      resultCorrect: Math.abs(sample[0] - expect) < 1e-6
+    };
+  } catch (e) { out.compute = "error: " + e.message; }
+  flush();
+
+  // --- Texture/render test: fill a 2048x2048 target ---
+  try {
+    const size = 2048;
+    const tex = device.createTexture({ size: [size, size], format: "rgba8unorm", usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+    const mod2 = device.createShaderModule({
+      code: `
+        @vertex fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
+          var p = array<vec2<f32>, 3>(vec2<f32>(-1.0,-1.0), vec2<f32>(3.0,-1.0), vec2<f32>(-1.0,3.0));
+          return vec4<f32>(p[vi], 0.0, 1.0);
+        }
+        @fragment fn fs(@builtin(position) fc: vec4<f32>) -> @location(0) vec4<f32> {
+          var acc = 0.0;
+          for (var k: u32 = 0u; k < 200u; k = k + 1u) {
+            acc = acc + sin(fc.x * 0.001 + f32(k)) * cos(fc.y * 0.001 + f32(k));
+          }
+          return vec4<f32>(acc * 0.002 + 0.5, 0.2, 0.7, 1.0);
+        }`
+    });
+    const p2 = device.createRenderPipeline({
+      layout: "auto",
+      vertex: { module: mod2, entryPoint: "vs" },
+      fragment: { module: mod2, entryPoint: "fs", targets: [{ format: "rgba8unorm" }] },
+      primitive: { topology: "triangle-list" }
+    });
+    const enc2 = device.createCommandEncoder();
+    const rp = enc2.beginRenderPass({ colorAttachments: [{ view: tex.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: "store" }] });
+    rp.setPipeline(p2); rp.draw(3); rp.end();
+    device.queue.submit([enc2.finish()]);
+    await withTimeout(device.queue.onSubmittedWorkDone(), 20000, "render-flush");
+    const t1 = performance.now();
+    for (let i = 0; i < 10; i++) {
+      const e = device.createCommandEncoder();
+      const r = e.beginRenderPass({ colorAttachments: [{ view: tex.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: "store" }] });
+      r.setPipeline(p2); r.draw(3); r.end();
+      device.queue.submit([e.finish()]);
+    }
+    await withTimeout(device.queue.onSubmittedWorkDone(), 20000, "render-flush-2");
+    const ms = (performance.now() - t1) / 10;
+    out.render = { targetSize: size + "x" + size, opsPerPixel: 200, msPerFrame: +ms.toFixed(2), mpixPerSec: +((size * size / 1e6) / (ms / 1000)).toFixed(1) };
+  } catch (e) { out.render = "error: " + e.message; }
+
+  out.phase = "done";
+  flush();
+  document.title = "gpu-probe: done";
+}
+
+main().catch((e) => { out.phase = "fatal"; out.error = String(e && e.stack || e); flush(); document.title = "gpu-probe: error"; });
+</script>
+</body>
+</html>

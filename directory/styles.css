@@ -1,0 +1,245 @@
+/* Independent Jewellers directory.
+   Same language as the Prism case study: the renderer's #222326 ground, one
+   spectral rule, and hairline structure instead of cards and pills. The JS is
+   untouched, so every class name below is load-bearing. */
+
+:root {
+  color-scheme: dark;
+
+  --bg:          #222326;
+  --ink:         #f3f1ed;
+  --ink-soft:    #c8c5bf;
+  --muted:       #918d87;
+  --rule:        rgba(255, 255, 255, 0.10);
+  --rule-strong: rgba(255, 255, 255, 0.20);
+  --link:        #6fe0cf;
+  --warn:        #ffca5c;
+  --ok:          #8fe0a8;
+
+  --s1: #8f74ff;  --s2: #5b9dff;  --s3: #4fd9c8;
+  --s4: #a9e05f;  --s5: #ffca5c;  --s6: #ff7b6b;
+  --spectrum: linear-gradient(92deg,
+    var(--s1), var(--s2) 20%, var(--s3) 40%, var(--s4) 60%, var(--s5) 80%, var(--s6));
+
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23918d87' stroke-width='1.5'/%3E%3C/svg%3E");
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The signature, shared with the case study: a beam split into its wavelengths. */
+body::before {
+  content: "";
+  position: fixed; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--spectrum); z-index: 50;
+}
+
+::selection { background: rgba(111, 224, 207, 0.28); }
+
+.wrap { width: min(1120px, 100% - 2.5rem); margin-inline: auto; }
+
+a { color: var(--link); text-decoration: none; border-bottom: 1px solid rgba(111, 224, 207, 0.35); }
+a:hover { border-bottom-color: var(--link); }
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------- header */
+.site { border-bottom: 1px solid var(--rule); margin-top: 3px; }
+.site .wrap {
+  display: flex; flex-wrap: wrap; gap: 1rem 2rem;
+  align-items: center; justify-content: space-between;
+  padding: 1.5rem 0 1.35rem;
+}
+.eyebrow {
+  margin: 0 0 0.65rem;
+  font: 600 0.68rem var(--mono);
+  text-transform: uppercase; letter-spacing: 0.2em;
+  color: var(--link);
+}
+.brand h1 { margin: 0; font-size: 1.7rem; letter-spacing: -0.03em; line-height: 1.1; }
+.tagline { margin: 0.4rem 0 0; color: var(--muted); }
+
+.progress { min-width: 230px; }
+.progress .bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+/* the fill is the same beam, cut to length as coverage grows */
+.progress .bar span {
+  display: block; height: 100%; width: 0;
+  background: var(--spectrum);
+  transition: width 0.4s ease;
+}
+.progress p { margin: 0.55rem 0 0; color: var(--muted); font: 400 0.78rem var(--mono); }
+.progress strong { color: var(--ink); }
+
+/* --------------------------------------------------------------------- banner */
+.banner {
+  margin: 1.5rem 0 0;
+  padding: 0.8rem 0 0.8rem 1rem;
+  border-left: 2px solid var(--warn);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+.banner strong { color: var(--warn); }
+
+/* ------------------------------------------------------------------- controls */
+.controls {
+  display: flex; flex-wrap: wrap; gap: 0.85rem;
+  align-items: end;
+  margin: 1.6rem 0 0;
+  padding: 1.15rem 0;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 150px; }
+.field.grow { flex: 1 1 220px; }
+.field label {
+  font: 600 0.64rem var(--mono);
+  text-transform: uppercase; letter-spacing: 0.13em;
+  color: var(--muted);
+}
+.field input[type="search"],
+.field select {
+  appearance: none;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  font: inherit;
+}
+.field input[type="search"]::placeholder { color: var(--muted); }
+.field select {
+  background-image: var(--chevron);
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  padding-right: 2rem;
+}
+.field input[type="search"]:hover,
+.field select:hover { border-color: rgba(255, 255, 255, 0.34); }
+.field.check {
+  flex-direction: row; align-items: center; gap: 0.5rem;
+  padding-bottom: 0.6rem;
+}
+.field.check input { width: 1.05rem; height: 1.05rem; accent-color: var(--link); }
+.field.check label {
+  text-transform: none; letter-spacing: 0;
+  font: 400 0.9rem var(--sans); color: var(--ink);
+}
+
+.resultline { margin: 1.1rem 0; color: var(--muted); font: 400 0.78rem var(--mono); }
+
+/* ----------------------------------------------------------------------- grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem 2.5rem;
+}
+
+.card {
+  display: flex; flex-direction: column; gap: 0.7rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule-strong);
+}
+/* featured work gets the warm end of the spectrum as its marker */
+.card.is-featured { border-top-color: var(--warn); }
+.card h3 { margin: 0; font-size: 1.12rem; letter-spacing: -0.015em; }
+.card .where { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.86rem; }
+.card .badges { margin: 0.65rem 0 0; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
+.badge {
+  display: inline-block;
+  padding: 0.14rem 0.45rem;
+  font: 600 0.62rem var(--mono);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  color: var(--muted);
+}
+.badge.featured { color: var(--warn);  border-color: rgba(255, 202, 92, 0.45); }
+.badge.sample   { color: #f0a6b8;      border-color: rgba(240, 166, 184, 0.4); }
+.badge.ok       { color: var(--ok);    border-color: rgba(143, 224, 168, 0.4); }
+
+/* Specialisms are plain text, not chips: two rows of little boxes next to the
+   status badges turns the card into soup. */
+.card .specs {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; flex-wrap: wrap; gap: 0;
+  font: 400 0.8rem var(--mono);
+  color: var(--ink-soft);
+}
+.card .specs li + li::before { content: "·"; color: var(--muted); margin: 0 0.45rem; }
+.card .notes { margin: 0; color: var(--muted); font-size: 0.87rem; }
+
+.card-foot {
+  margin-top: auto;
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1rem;
+  justify-content: space-between; align-items: baseline;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.7rem;
+}
+.card-foot .contact { margin: 0; display: flex; gap: 0.9rem; font-size: 0.88rem; }
+.card-foot .checked { margin: 0; font: 400 0.68rem var(--mono); color: var(--muted); }
+
+.empty {
+  padding: 2.2rem;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--rule-strong);
+}
+
+/* ------------------------------------------------------------------------ cta */
+.cta {
+  margin: 3rem 0 1rem;
+  padding: 1.6rem 0;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.cta h2 { margin: 0 0 0.45rem; font-size: 1.2rem; letter-spacing: -0.02em; }
+.cta p { margin: 0 0 1.1rem; color: var(--muted); }
+
+.btn {
+  display: inline-block;
+  padding: 0.7rem 1.15rem;
+  background: var(--spectrum);
+  color: #141519;
+  font: 700 0.78rem var(--sans);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  text-decoration: none;
+  border: none; border-radius: 0;
+}
+.btn:hover { filter: brightness(1.12); color: #141519; }
+
+/* --------------------------------------------------------------------- footer */
+footer.site { margin-top: 2rem; border-top: 1px solid var(--rule); }
+footer.site .wrap { padding: 1.3rem 0 3rem; }
+footer.site p { margin: 0; color: var(--muted); font: 400 0.76rem var(--mono); }
+
+@media (max-width: 34rem) {
+  .grid { gap: 1.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress .bar span { transition: none; }
+}
