@@ -1,0 +1,49 @@
+Source-available licence
+========================
+
+Copyright (c) 2026 Nabil Babaslimane. All rights reserved.
+
+Carat is published so that it can be read, run and evaluated. It is not open
+source. No rights are granted except those set out below.
+
+
+You may
+-------
+
+  - read, clone and run this code, for any non-commercial purpose;
+  - study it and learn from it;
+  - quote short excerpts of it, with attribution and a link back to this
+    repository, in writing that discusses it.
+
+
+You may not
+-----------
+
+  - copy, reuse or adapt this code, in whole or in substantial part, in any
+    other project;
+  - redistribute it, or include it in any product, service, package or
+    repository of your own;
+  - sell it, or offer it or anything derived from it commercially;
+  - use it as training data for a machine-learning model;
+  - remove or alter this notice.
+
+
+Permission
+----------
+
+If you would like to use any part of this work beyond the terms above, ask
+first — permission is often granted, and easy to give in writing:
+
+  nabilbabaslimane@gmail.com
+
+
+No warranty
+-----------
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

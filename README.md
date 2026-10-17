@@ -78,3 +78,8 @@ and a preset that was quietly authoring a "prism" out of diamond's refractive
 index.
 
 The theme running through all of them: **validate the output, not just the speed.**
+
+## Licence
+
+Source-available, not open source. Read it, run it, learn from it, quote it with
+attribution — but please don't reuse or redistribute it. See [LICENSE](LICENSE).
