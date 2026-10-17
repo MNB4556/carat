@@ -5,6 +5,8 @@ against raw WebGPU. One HTML file, no dependencies, no build step.
 
 ![A 65-facet brilliant cut rendered by the engine](portfolio/hero-brilliant.png)
 
+**Live:** [mnb4556.github.io/carat](https://mnb4556.github.io/carat/)
+
 ## What this is
 
 Most renderers carry light as three numbers — red, green, blue. This one carries
