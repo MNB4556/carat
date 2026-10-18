@@ -270,11 +270,23 @@ This is deliberately **not** counted among the nine. All nine of those produced 
 *plausible number from a broken renderer* — a confident frame rate from a
 pipeline that drew nothing. This one produced no number at all: a milder and
 quite different failure. The lesson still rhymes, though, because the output was
-never validated against the machine it would really run on. The harness browser
-renders the deployed page without complaint (adapter `amd gcn-5`); an ordinary
-browser on the same laptop did not. Same code, same machine, different answer —
-so the interesting variable was the environment, and the old code had no way to
-say so.
+never validated against the machine it would really run on.
+
+**Resolved the same day, and the machine was never at fault.** Chromium on this
+laptop had been getting a real adapter all along — `amd gcn-5`, from a plain
+launch carrying no GPU flags — while Edge reported *every* accelerated feature
+disabled: WebGL, rasterisation, video decode and encode, GPU compositing, 2D
+canvas and WebGPU together. That whole set going dark is the signature of
+acceleration switched off for the browser, not of a blocklist contending with one
+feature; a WebGPU-only entry disables WebGPU and nothing else. The cause was
+`hardware_acceleration_mode.enabled = false`, which lives in the browser's
+`Local State`, *not* in the per-profile `Preferences` file where the first search
+looked — which is why the first answer was wrong. Restoring the setting made the
+renderer run.
+
+The transferable lesson is not about browsers. **A failure that names its symptom
+and not its cause hands the whole investigation to whoever reads it.** Four words
+sent the diagnosis down two wrong paths before the right one turned up.
 
 ---
 
