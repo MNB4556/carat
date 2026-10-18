@@ -236,6 +236,48 @@ is the difference between a correct renderer and a convincing one.
 
 ---
 
+## Session 4: the renderer that would not say why
+
+This one arrived as a bug report rather than a measurement. Loading the deployed
+page from GitHub Pages on this machine printed:
+
+```
+init failed: No WebGPU adapter found.
+```
+
+True, and useless. `navigator.gpu` existed, so WebGPU was present; the adapter
+simply never answered. The old code asked exactly once, and asked specifically:
+
+```js
+const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+if (!adapter) throw new Error("No WebGPU adapter found.");
+```
+
+Two faults in three lines.
+
+**It asked for the fast GPU and never fell back.** A `high-performance` hint is
+not a promise: on some systems the request is refused outright rather than
+answered with the only GPU the machine has. It now makes four requests in order
+— high-performance, plain, low-power, software — and reports which one answered,
+so a software adapter can no longer pass itself off as a real one in the readout.
+
+**It named the symptom and not the cause.** "No adapter" covers three unrelated
+problems with three unrelated remedies: hardware acceleration switched off, the
+GPU on the WebGPU blocklist, or the GPU busy or short of memory. The message now
+says so, in the order worth checking, instead of leaving the reader to guess.
+
+This is deliberately **not** counted among the nine. All nine of those produced a
+*plausible number from a broken renderer* — a confident frame rate from a
+pipeline that drew nothing. This one produced no number at all: a milder and
+quite different failure. The lesson still rhymes, though, because the output was
+never validated against the machine it would really run on. The harness browser
+renders the deployed page without complaint (adapter `amd gcn-5`); an ordinary
+browser on the same laptop did not. Same code, same machine, different answer —
+so the interesting variable was the environment, and the old code had no way to
+say so.
+
+---
+
 ## Honest status of the renderer
 
 It works, it is physically motivated, and it now draws a real **65-facet

@@ -406,17 +406,70 @@ fn tracePath(ro : vec3<f32>, rd : vec3<f32>, nGem : f32) -> f32 {
 `;
 
 // ---------------------------------------------------------------- setup
+
+// WebGPU providers are not equally willing. Some systems refuse a
+// `high-performance` request rather than quietly falling back to the only GPU
+// they have, and a few answer a low-power request when nothing else works. Ask
+// in order of preference and take the first adapter that answers.
+async function pickAdapter() {
+  const attempts = [
+    ['hardware', { powerPreference: 'high-performance' }],
+    ['hardware', undefined],
+    ['low-power', { powerPreference: 'low-power' }],
+    ['software', { forceFallbackAdapter: true }],
+  ];
+  for (const [kind, opts] of attempts) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter(opts);
+      if (adapter) return { adapter, kind };
+    } catch (e) { /* nothing answered; try the next request */ }
+  }
+  return { adapter: null, kind: null };
+}
+
+// An error already written as prose, so the top-level catch does not prefix it.
+function help(text) { const e = new Error(text); e.plain = true; return e; }
+
+// A bare "no adapter" is the least useful message a renderer can print. If the
+// GPU will not answer, the reader deserves to know which of the three usual
+// causes to check, in the order worth checking them.
+function noAdapterMessage() {
+  return [
+    "No WebGPU adapter found.",
+    "",
+    "This browser has WebGPU, but the machine's GPU did not answer to it. In",
+    "order of likelihood:",
+    "",
+    "  1. Hardware acceleration is switched off. Chrome or Edge: Settings, System,",
+    "     enable \"Use graphics acceleration when available\", then restart.",
+    "",
+    "  2. The GPU is on the WebGPU blocklist. Open chrome://gpu, search for",
+    "     \"WebGPU\", and if it reads Disabled, enable",
+    "     chrome://flags/#enable-unsafe-webgpu and restart.",
+    "",
+    "  3. The GPU is busy or short of memory. Close other tabs, especially other",
+    "     3D or WebGPU pages, then reload.",
+    "",
+    "This is a real-time ray tracer and needs a real GPU. The browser offers no",
+    "software path for WebGPU here.",
+  ].join("\n");
+}
+
 async function init() {
-  if (!navigator.gpu) throw new Error("WebGPU not available in this browser.");
-  const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-  if (!adapter) throw new Error("No WebGPU adapter found.");
+  if (!navigator.gpu) {
+    throw help("This browser has no WebGPU. Chrome or Edge 113+, or Safari 26+, is required.");
+  }
+  const picked = await pickAdapter();
+  if (!picked.adapter) throw help(noAdapterMessage());
+  const adapter = picked.adapter;
   const device = await adapter.requestDevice();
   device.lost.then(i => fail("device lost: " + (i && i.message)));
   device.addEventListener?.('uncapturederror', e => fail("gpu error: " + e.error.message));
 
   let info = adapter.info || {};
   document.getElementById('adapter').textContent =
-    ((info.vendor || 'gpu') + ' ' + (info.architecture || '')).trim();
+    ((info.vendor || 'gpu') + ' ' + (info.architecture || '')).trim() +
+    (picked.kind === 'software' ? ' (software)' : '');
 
   const ctx = canvas.getContext('webgpu');
   const format = navigator.gpu.getPreferredCanvasFormat();
@@ -745,7 +798,7 @@ async function init() {
 try {
   await init();
 } catch (e) {
-  fail("init failed: " + (e && e.message ? e.message : e));
+  fail(e && e.plain ? e.message : "init failed: " + (e && e.message ? e.message : e));
 }
 </script>
 </body>
