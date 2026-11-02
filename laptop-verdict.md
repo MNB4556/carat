@@ -126,7 +126,7 @@ editor, Electron and Edge were already holding ~1.5 GB between them. So:
 
 ```
 prism/
-  reference/optics.py     validated physics reference (numpy), 8 checks pass
+  reference/optics.py     validated physics reference (numpy), all checks pass
   web/gem.html            WebGPU spectral renderer: orbit, sliders, PNG export
   renders/                exported frames
 directory/
