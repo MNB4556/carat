@@ -86,8 +86,8 @@
     The stone is not a mesh. It is the intersection of 65 planes. A ray misses
     the solid unless it is inside <em>every</em> half-space, which means one
     ordered loop over 65 planes replaces a mesh traversal, a BVH, and every
-    floating-point normal you would otherwise interpolate. It is exact,
-    branch-free, and fits in a uniform buffer.
+    floating-point normal you would otherwise interpolate. It is exact, and it
+    fits in a uniform buffer.
   </p>
 
   <h3>3. From scratch</h3>
