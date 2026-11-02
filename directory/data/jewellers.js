@@ -17,7 +17,7 @@ window.DIRECTORY_META = {
 window.JEWELLERS = [
   {
     id: "sample-bristol",
-    name: "Sample — Harbourside Bench",
+    name: "Sample: Harbourside Bench",
     city: "Bristol",
     region: "South West",
     website: "https://example.com",
@@ -33,7 +33,7 @@ window.JEWELLERS = [
   },
   {
     id: "sample-manchester",
-    name: "Sample — North Quarter Gold",
+    name: "Sample: North Quarter Gold",
     city: "Manchester",
     region: "North West",
     website: "https://example.com",
@@ -49,7 +49,7 @@ window.JEWELLERS = [
   },
   {
     id: "sample-edinburgh",
-    name: "Sample — Ash & Facet",
+    name: "Sample: Ash & Facet",
     city: "Edinburgh",
     region: "Scotland",
     website: "https://example.com",
@@ -65,7 +65,7 @@ window.JEWELLERS = [
   },
   {
     id: "sample-norwich",
-    name: "Sample — The Quiet Forge",
+    name: "Sample: The Quiet Forge",
     city: "Norwich",
     region: "East of England",
     website: "https://example.com",
@@ -81,7 +81,7 @@ window.JEWELLERS = [
   },
   {
     id: "sample-london",
-    name: "Sample — Greenwich Stoneworks",
+    name: "Sample: Greenwich Stoneworks",
     city: "London",
     region: "London",
     website: "https://example.com",
@@ -97,7 +97,7 @@ window.JEWELLERS = [
   },
   {
     id: "sample-leeds",
-    name: "Sample — Cobble Lane Jewellery",
+    name: "Sample: Cobble Lane Jewellery",
     city: "Leeds",
     region: "Yorkshire",
     website: "https://example.com",

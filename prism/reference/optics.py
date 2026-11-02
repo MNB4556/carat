@@ -1,8 +1,8 @@
 """
-Prism — physics reference implementation.
+Prism: physics reference implementation.
 
 This is the ground truth the browser engine gets checked against.
-Pure numpy, no heavy deps — runs fine on a 2-core laptop.
+Pure numpy, no heavy deps, and it runs fine on a 2-core laptop.
 
 Run:  python optics.py
 
@@ -85,7 +85,7 @@ def fresnel_reflectance(direction: np.ndarray, normal: np.ndarray, eta: float) -
 
     This is the number that decides how much light bounces off a facet
     versus entering the stone. Diamond's high index is why it reflects
-    so much — the whole reason it sparkles.
+    so much, which is the whole reason it sparkles.
     """
     d = direction / np.linalg.norm(direction)
     n = normal / np.linalg.norm(normal)
@@ -231,7 +231,7 @@ def light_return(
 
     Accuracy note: this is a 2-D cross-section, so it ignores the 3-D crown
     arrangement and treats the girdle as a point. Treat it as a shape, not a
-    grade — good enough to show *why* the angle matters, not to certify a stone.
+    grade, good enough to show *why* the angle matters, not to certify a stone.
     """
     n_glass = material.n(wavelength_nm)
     edges = _edges(_outline(pavilion_angle_deg))
@@ -274,7 +274,7 @@ def light_return(
 
     # Fire a bundle of rays across the table rather than one ray down the axis.
     # A single central ray lands exactly on the culet, where the two pavilion
-    # facets meet — a degenerate hit that reflects numerically outside the
+    # facets meet, a degenerate hit that reflects numerically outside the
     # stone. Off-axis rays meet real facet surfaces, as light actually does.
     span = TABLE_HALF_WIDTH - 0.05
     rays = 60
@@ -356,7 +356,7 @@ def run_tests() -> bool:
 
 
 def light_return_curve(material: Cauchy = DIAMOND) -> None:
-    print(f"\nLight return vs pavilion angle — {material.name}")
+    print(f"\nLight return vs pavilion angle: {material.name}")
     print("-" * 60)
     print("Two-dimensional cross-section only. It shows that the pavilion angle")
     print("is what decides how much light comes back, but it does NOT reproduce")

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Prism — spectral gem renderer</title>
+<title>Prism: spectral gem renderer</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -91,7 +91,7 @@ const MAX_PLANES = 80;
 
 // ---------------------------------------------------------------- geometry
 // A gem is just the intersection of half-spaces { x : dot(n,x) <= d }.
-// Ray vs convex polyhedron is then exact and cheap — no mesh, no BVH.
+// Ray vs convex polyhedron is then exact and cheap: no mesh, no BVH.
 
 function planesPrism() {
   const r = 0.55, h = 0.75, P = [];
@@ -105,7 +105,7 @@ function planesPrism() {
 }
 
 // A full brilliant: table, 8 stars, 8 bezels, 16 upper-girdle, a girdle band,
-// 16 lower-girdle and 8 pavilion mains — 65 facets.
+// 16 lower-girdle and 8 pavilion mains, 65 facets in all.
 //
 // The angles are the real ones and the ring distances are derived, not guessed.
 // A facet plane that runs down to the girdle circle sits at distance sin(a). The
@@ -141,7 +141,7 @@ function planesBrilliant() {
   ring(8,  0.0,          A_BEZEL, Math.sin(A_BEZEL), false);          // bezel kites, down to the girdle
   // The girdle facets are pulled 3% inside the girdle circle so they actually
   // bind near it. Two cones that both touch the girdle are nested, and the
-  // shallower one simply hides the other — which is how 16 facets quietly
+  // shallower one simply hides the other, which is how 16 facets quietly
   // become 0.
   ring(16, Math.PI / 16, A_UPPER, Math.sin(A_UPPER) * 0.97, false);   // upper girdle
 
@@ -199,7 +199,7 @@ fn luminance(c : vec3<f32>) -> f32 { return dot(c, vec3<f32>(0.2126, 0.7152, 0.0
 fn env(d : vec3<f32>) -> vec3<f32> {
   // Dark surround, bright softboxes. Contrast is what reads as sparkle: a
   // facet lit by a bright box sitting next to a facet showing darkness
-  // glitters. A uniformly bright room turns every facet the same flat grey —
+  // glitters. A uniformly bright room turns every facet the same flat grey,
   // which is exactly what the previous version did.
   var c = vec3<f32>(0.10, 0.11, 0.13);
   c = c + vec3<f32>(0.34, 0.36, 0.42) * smoothstep(0.0, 0.7, d.y);       // sky
@@ -245,7 +245,7 @@ fn refractD(d : vec3<f32>, n : vec3<f32>, eta : f32) -> Refr {
   return Refr(true, eta * d + (eta * cosI - cosT) * n);
 }
 
-// Ray vs convex polyhedron. It must compute BOTH slabs — entry and exit.
+// Ray vs convex polyhedron. It must compute BOTH slabs, entry and exit.
 // Taking only the largest front-face hit is the classic bug: a ray that misses
 // the solid entirely still reports a positive entry, because any plane it
 // violates from the outside yields a positive t. Without the exit test the
@@ -312,7 +312,7 @@ fn tracePath(ro : vec3<f32>, rd : vec3<f32>, nGem : f32) -> f32 {
   let nEnt = e.yzw;
   var pos = ro + rd * e.x;
 
-  // Fresnel reflection off the front facet — the surface highlight.
+  // Fresnel reflection off the front facet, the surface highlight.
   let cosI0 = clamp(-dot(rd, nEnt), 1e-4, 1.0);
   let R0 = fresnelR(cosI0, 1.0 / nGem);
   lumi = lumi + luminance(env(reflect(rd, nEnt))) * R0;
@@ -377,7 +377,7 @@ fn tracePath(ro : vec3<f32>, rd : vec3<f32>, nGem : f32) -> f32 {
       // Flat backdrop. Deliberately a constant rather than the environment, so an
       // exported frame has a single uniform background colour and composites onto
       // a page of that colour with no visible edge. env() is still what the gem
-      // itself reflects — this only affects rays that miss it.
+      // itself reflects; this only affects rays that miss it.
       col = col + vec3<f32>(0.0060, 0.0064, 0.0077);
       valid = valid + 1.0;
     } else {
@@ -547,7 +547,7 @@ async function init() {
   const setPreset = (p) => {
     preset = p;
     currentPlanes = (p === 'prism') ? planesPrism() : planesBrilliant();
-    // The two presets are different materials, not just different shapes.
+    // The two presets use different materials as well as different shapes.
     MAT = (p === 'prism') ? MAT_GLASS : MAT_DIAMOND;
     el('bPrism').classList.toggle('on', p === 'prism');
     el('bGem').classList.toggle('on', p === 'brilliant');
@@ -632,8 +632,8 @@ async function init() {
   let refinedDrawn = false;
   function drawScene(now) {
     updateCamera(now * 0.001);
-    // Auto-refine. Once the view has truly stopped — nothing being dragged, and
-    // the turntable not spinning — re-render once at higher AA and more
+    // Auto-refine. Once the view has truly stopped (nothing being dragged and
+    // the turntable not spinning), re-render once at higher AA and more
     // wavelengths, then rest. "Once, then rest" matters: a refined frame costs
     // ~140 ms here, so repeating it every frame would be a permanent stutter
     // rather than a settle, and it would keep the GPU busy forever on a page
@@ -768,7 +768,7 @@ async function init() {
     setCamera: (o = {}) => { Object.assign(cam, o); return { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, spin: cam.spin }; },
     // Advance exactly one frame the way the animation loop would, and report
     // whether it drew anything. rAF is throttled to zero in a background tab, so
-    // without this the draw path — auto-refine included — cannot be exercised at
+    // without this the draw path, auto-refine included, cannot be exercised at
     // all outside a visible window. Same reason bench() exists.
     tick: (now = performance.now()) => drawScene(now),
     // Times the GPU directly: submit, wait for completion, repeat. Immune to

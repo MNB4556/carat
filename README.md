@@ -1,85 +1,79 @@
 # Carat
 
-A physically-based **spectral ray tracer for gemstones**, written from scratch
-against raw WebGPU. One HTML file, no dependencies, no build step.
+A spectral ray tracer for gemstones, written from scratch against raw WebGPU.
+One HTML file, no dependencies, no build step.
 
 ![A 65-facet brilliant cut rendered by the engine](portfolio/hero-brilliant.png)
 
-**Live:** [mnb4556.github.io/carat](https://mnb4556.github.io/carat/)
+Live: [mnb4556.github.io/carat](https://mnb4556.github.io/carat/)
 
-## What this is
+## How it works
 
-Most renderers carry light as three numbers — red, green, blue. This one carries
-a **wavelength**, sampled from 400–700 nm, and recomputes the stone's refractive
-index from that wavelength at every surface it touches. Dispersion is not painted
-on afterwards; it falls out of the maths. That is what *fire* actually is.
+Most renderers carry light as three numbers: red, green and blue. Carat carries
+a wavelength sampled between 400 and 700 nm, and recomputes the stone's
+refractive index from that wavelength at every surface the ray touches.
+Dispersion comes out of the maths instead of being added afterwards.
 
-The stone is not a mesh. It is the **intersection of 65 half-spaces** — a table,
-8 stars, 8 bezels, 16 upper-girdle facets, a girdle band, 16 lower-girdle facets
-and 8 pavilion mains, at the real angles for a 34.5°/40.75° round brilliant. A ray
-misses unless it is inside *every* half-space, so one ordered loop replaces a mesh
-traversal, a BVH, and every floating-point normal you would otherwise have to
-interpolate.
+The stone is the intersection of 65 half-spaces: a table, 8 stars, 8 bezels,
+16 upper-girdle facets, a girdle band, 16 lower-girdle facets and 8 pavilion
+mains, at the real angles for a 34.5/40.75 round brilliant. A ray only continues
+if it is inside all 65, so intersection is one ordered loop over planes instead
+of a mesh traversal, a BVH, and interpolated normals.
 
-Buffers, bind groups, uniform layouts, the render pipeline, the WGSL, and the
-readback path for PNG export are all written against the raw API. There is no
-engine underneath this.
+Buffers, bind groups, uniform layouts, the render pipeline, the WGSL and the
+readback path for PNG export are all written against the raw API. No engine sits
+underneath it.
 
-## Run it
+## Running it
 
-Open `prism/web/gem.html` in Chrome or Edge (WebGPU required). Drag to orbit,
-scroll to zoom. Sliders control internal resolution, wavelength count, bounce
-depth, dispersion, exposure and anti-aliasing. Two presets: a prism and a
-65-facet brilliant.
+Open `prism/web/gem.html` in Chrome or Edge. WebGPU is required. Drag to orbit
+and scroll to zoom. The sliders control internal resolution, wavelength count,
+bounce depth, dispersion, exposure and anti-aliasing. There are two presets, a
+prism and a 65-facet brilliant.
 
-Everything is inline, so it runs straight off disk — no server, no build step.
-To serve the whole repo instead:
+Everything is inline, so it runs from disk without a server. To serve the whole
+repository instead:
 
 ```
 python -m http.server 8000
 ```
 
-then visit `/portfolio/` for the case study and `/directory/` for the directory.
+Then `/portfolio/` is the case study and `/directory/` is the jeweller
+directory.
 
-## What's in here
+## What is in the repository
 
 | Path | |
 |---|---|
-| `prism/web/gem.html` | the renderer — geometry, optics, UI, PNG export |
-| `prism/reference/optics.py` | independent physics reference (numpy), asserting the Fresnel and dispersion figures the shader uses |
+| `prism/web/gem.html` | the renderer: geometry, optics, UI, PNG export |
+| `prism/reference/optics.py` | a second model of the optics in numpy, used to check the Fresnel and dispersion figures the shader relies on |
 | `prism/renders/` | exported frames |
-| `portfolio/` | a case study page: what it does, what I measured, and what went wrong |
-| `directory/` | a searchable listing of independent jewellers who take on custom work |
+| `portfolio/` | the case study page |
+| `directory/` | a searchable list of independent jewellers who take custom work |
 | `probe/gpu-probe.html` | WebGPU capability probe and micro-benchmarks |
-| `laptop-verdict.md` | the working log — measurements, decisions, and every bug |
+| `laptop-verdict.md` | the working log: measurements, decisions and bugs |
 
-## What it deliberately does not claim
+## What it does not do
 
-Two honest limits, both discussed in full on the case study page:
-
-- **It is not photorealistic.** The environment is an analytic function, not an
-  HDRI. Dispersion is computed correctly and is *still* barely visible, because a
-  broad softbox reflected in a facet smears the separated wavelengths back into
-  white. Fire needs small, bright sources against darkness. That is the next job,
-  and `laptop-verdict.md` records the experiment that proved it.
-- **Nothing reads as coloured stone.** Every material is a pure dielectric with a
+- It is not photorealistic. The environment is an analytic function rather than
+  an HDRI. Dispersion is computed correctly and is still hard to see, because a
+  broad softbox reflected in a facet smears the separated wavelengths back
+  towards white. Small bright sources against darkness show it better, and that
+  is the next piece of work.
+- Nothing reads as coloured stone. Every material is a pure dielectric with a
   Cauchy index and no absorption, so a sapphire is not possible yet.
+- It makes no grading claims. This is a mechanism, not an appraisal, and it says
+  nothing about what a stone is worth.
 
-It also makes **no grading claims**, ever. This is a mechanism, not a grade, and
-it does not say what any stone is worth.
+## Bugs
 
-## The bug log
-
-`laptop-verdict.md` is the part most worth reading. Nine bugs, nearly all of which
-produced a *plausible number from a broken renderer* — including a benchmark that
-reported a confident 63.5 fps because an invalid pipeline was submitting nothing
-at all, sixteen facets that were mathematically present and completely invisible,
-and a preset that was quietly authoring a "prism" out of diamond's refractive
-index.
-
-The theme running through all of them: **validate the output, not just the speed.**
+`laptop-verdict.md` records nine bugs, most of which produced a plausible number
+from a broken renderer. One benchmark reported a confident 63.5 fps while an
+invalid pipeline submitted nothing at all. Sixteen facets were mathematically
+present and completely invisible. One preset was quietly building a "prism" out
+of diamond's refractive index.
 
 ## Licence
 
-Source-available, not open source. Read it, run it, learn from it, quote it with
-attribution — but please don't reuse or redistribute it. See [LICENSE](LICENSE).
+Source-available, not open source. You may read it, run it, learn from it and
+quote it with attribution. Please do not redistribute it. See [LICENSE](LICENSE).

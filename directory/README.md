@@ -1,18 +1,18 @@
 # The Directory
 
-Independent jewellers who take on custom work. Static site, no build step, no dependencies,
-no server required.
+Independent jewellers who take on custom work. A static site: no build step, no
+dependencies, no server.
 
 Open `index.html` in a browser. That is the whole deployment.
 
-## Why this exists (two jobs, one file)
+## What it is for
 
-1. **A public directory.** People search "bespoke jeweller Leeds" and land here.
-2. **The Carat lead list.** Every real, verified entry is a workshop you can ring about Carat.
-   This replaces most of the "find ten jewellers" week in the Carat plan.
+1. A public directory, for people searching for a bespoke jeweller in their area.
+2. A lead list. Every verified entry is a workshop I can approach about Carat.
 
-The progress bar at the top counts *verified* entries, so the page is also your research tracker.
-Source 40, verify them one at a time, and the bar fills in.
+The progress bar at the top counts verified entries, so the page doubles as the
+research tracker. Add forty entries, verify them one at a time, and the bar
+fills in.
 
 ## Files
 
@@ -21,15 +21,15 @@ directory/
   index.html            the page
   styles.css            all styling
   app.js                filtering, sorting, rendering
-  data/jewellers.js     the data — this is the file you edit
+  data/jewellers.js     the data; this is the file you edit
   README.md             you are here
 ```
 
-`data/jewellers.js` is a plain script that sets `window.JEWELLERS`. It is a script rather than a
-JSON file on purpose: a `fetch()` of a local JSON file is blocked by browsers when you open the page
-straight off disk, but a `<script src>` always works. So the site runs from `file://` with no server.
+`data/jewellers.js` is a plain script that sets `window.JEWELLERS` rather than a
+JSON file. A local `fetch()` is blocked when the page is opened from disk, while
+a `<script src>` always works, so the site runs from `file://` with no server.
 
-## Filling it in
+## Adding an entry
 
 Copy one block in `data/jewellers.js` and edit it:
 
@@ -46,57 +46,58 @@ Copy one block in `data/jewellers.js` and edit it:
   customWork: true,
   priceBand: "££",                      // £ / ££ / £££, optional
   notes: "One line on what they are good at, or what they lose sales on.",
-  featured: false,                      // paid placement — see below
-  verified: true,                       // you have checked this is real
+  featured: false,                      // paid placement, see below
+  verified: true,                       // the business is real and the details were checked
   sample: false,                        // false for real entries
-  lastChecked: "2026-10-16"             // the date you last confirmed the details
+  lastChecked: "2026-10-16"
 }
 ```
 
-Rules I would hold to:
+Three rules:
 
-- **`sample: true` on anything you have not checked.** The page renders a loud SAMPLE badge and the
-  banner stays up. Delete the flag only when you have confirmed the business is real and the contact
-  details work.
-- **`verified` is about accuracy, `sample` is about provenance.** A real business whose email you
-  have not tested is `verified: true, sample: false`, with `lastChecked` set.
-- **Never invent a business.** A directory of plausible-looking fake jewellers would mean you email
-  strangers about a product they have never heard of, from a page that misrepresents them. The six
-  entries shipped here are deliberately, visibly fake for exactly this reason.
+- Set `sample: true` on anything not yet checked. The page shows a SAMPLE badge
+  and keeps the banner up until it is removed.
+- `verified` and `sample` are different things. `verified` means the details have
+  been checked; `sample` means the entry is a placeholder. A real entry can still
+  be incomplete, so leave `verified: false` until the details are confirmed.
+- Never invent a business. A directory of plausible fakes means emailing strangers
+  about a product they have never heard of, from a page that misrepresents them.
+  The six entries shipped here are fake on purpose.
 
-The `region` and `specialism` dropdowns populate themselves from the data, so you never edit the HTML.
+The region and specialism dropdowns populate themselves from the data, so the
+HTML is never edited by hand.
 
 ## Hosting
 
 Any of these, free, in a few minutes:
 
-- **GitHub Pages.** Put the `directory` folder in a repo, enable Pages, done.
-- **Netlify / Cloudflare Pages.** Drag the folder onto the dashboard.
-- **Any static host.** There is nothing to build; upload the four files.
+- GitHub Pages: put the folder in a repo, enable Pages.
+- Netlify or Cloudflare Pages: drag the folder onto the dashboard.
+- Any static host: upload the four files.
 
-Because it is static, it costs nothing to run and cannot fall over.
+There is nothing to build, so it costs nothing to run.
 
 ## Making money from it
 
-The honest sequencing, given you have no audience yet:
+There is no audience yet, so the order matters.
 
-1. **Nothing, at first.** Publish with real entries and no ads. The page's only job early on is to
-   exist and rank for a few long-tail searches, and to be the thing you link when you email a
-   workshop.
-2. **Once it gets traffic, sell placement.** "Featured" puts a workshop at the top of its region.
-   Local trade directories charge £10–£60/month for this sort of slot. Even three paying listings is
-   a real, recurring £50–£150/month for a page you do not have to touch.
-3. **Then it becomes a lead source for the actual product.** A jeweller who takes a listing is a
-   jeweller already paying for visibility. That is a far warmer conversation about Carat than a
-   cold email.
+1. Publish with real entries and no ads. Early on the page only has to exist, rank
+   for a few long-tail searches, and be the link in an email to a workshop.
+2. Once there is traffic, sell placement. Featured puts a workshop at the top of
+   its region. Local trade directories charge £10 to £60 a month for that slot,
+   so three paying listings is a recurring £50 to £150 for a page that never
+   changes.
+3. Use it as a lead source for the product. A jeweller who buys a listing is
+   already paying for visibility, which is a warmer conversation about Carat than
+   a cold email.
 
-The `featured` flag in the data file is the entire mechanism for step 2. Nothing else is needed.
+The `featured` flag is the whole mechanism for step 2.
 
-## What this deliberately is not
+## Limits
 
-- Not a booking system, not a marketplace, not a CMS.
-- No analytics, no cookies, no third-party scripts.
+- Not a booking system, a marketplace or a CMS.
+- No analytics, cookies or third-party scripts.
 - No server, so no hosting bill and no outage to apologise for.
 
-If it ever needs to grow past that, it will need a backend and a database, which is a different
-project with a different budget. This one is sized to be finishable this week.
+Anything bigger needs a backend and a database, which is a different project with
+a different budget. This one is sized to be finished this week.

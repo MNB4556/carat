@@ -1,6 +1,6 @@
 /* Prism case study.
    Design premise: the renderer's own backdrop is a flat #222326, so the page is
-   that exact colour and the hero frame has no edge — the stone floats in the
+   that exact colour and the hero frame has no edge, so the stone floats in the
    page instead of sitting in a box. Everything else is hairlines and one
    spectral rule, because dispersion is what the project is about. */
 
