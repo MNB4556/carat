@@ -44,15 +44,18 @@
   // ---- progress: this is a research tracker as much as a directory ----
   var target = meta.target || 40;
   var listed = data.length;
-  var sourced = data.filter(function (d) { return !d.sample; }).length;
-  $("sourcedCount").textContent = String(sourced);
+  var verified = data.filter(function (d) { return d.verified; }).length;
+  var samples = data.filter(function (d) { return d.sample; }).length;
+  var unverified = listed - verified - samples;
+  $("sourcedCount").textContent = String(verified);
   $("target").textContent = String(target);
   $("listedCount").textContent = String(listed);
-  $("bar").style.width = Math.min(100, Math.round((sourced / target) * 100)) + "%";
-  $("sampleBanner").hidden = !data.some(function (d) { return d.sample; });
+  $("bar").style.width = Math.min(100, Math.round((verified / target) * 100)) + "%";
+  $("sampleBanner").hidden = samples === 0;
   $("footNote").textContent =
     "Last updated " + (meta.lastUpdated || "—") + ". " +
-    sourced + " verified, " + (listed - sourced) + " sample. " +
+    verified + " verified, " + samples + " sample" +
+    (unverified > 0 ? ", " + unverified + " unverified" : "") + ". " +
     "Sample entries are placeholders, not real businesses.";
 
   function matches(d) {
